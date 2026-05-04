@@ -5,7 +5,6 @@ import {
   BsFire,
   BsGift,
   BsStar,
-  BsShield,
   BsChatDots,
   BsDownload,
   BsGlobe,
@@ -15,8 +14,7 @@ import { FaUserFriends, FaTrophy, FaUsers } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import styled from "styled-components";
 
-const API =
-  import.meta.env.VITE_REACT_APP_BACKEND_API2 || "http://localhost:5002";
+const API = import.meta.env.VITE_API_URL
 
 const getImageUrl = (path = "") => {
   if (!path) return "";
@@ -145,58 +143,17 @@ const LanguageOption = styled.div`
   }
 `;
 
-const iconMap = {
-  "HOT GAMES": <BsFire />,
-  FAVORITES: <BsStar />,
-  SLOTS: (
-    <img
-      src="/icons/slots.png"
-      alt="slots"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
-  ),
-  LIVE: (
-    <img
-      src="/icons/live.png"
-      alt="live"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
-  ),
-  SPORTS: (
-    <img
-      src="/icons/sports.png"
-      alt="sports"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
-  ),
-  "E-SPORTS": (
-    <img
-      src="/icons/esports.png"
-      alt="esports"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
-  ),
-  POKER: (
-    <img
-      src="/icons/poker.png"
-      alt="poker"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
-  ),
-  FISHING: (
-    <img
-      src="/icons/fish.png"
-      alt="fish"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
-  ),
-  LOTTERY: (
-    <img
-      src="/icons/lottery.png"
-      alt="lottery"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
-  ),
+const normalizeKey = (value = "") =>
+  String(value).trim().toUpperCase().replace(/_/g, "-").replace(/\s+/g, " ");
+
+const getCategoryPath = (category) => {
+  const enName = normalizeKey(category?.categoryName?.en);
+
+  if (enName === "FAVOURITE" || enName === "FAVORITE") {
+    return `/category/${category._id}`;
+  }
+
+  return `/category/${category._id}`;
 };
 
 const SidebarMenu = () => {
@@ -259,6 +216,8 @@ const SidebarMenu = () => {
       FISHING: "ফিশিং",
       LOTTERY: "লটারি",
       FAVORITES: "পছন্দের",
+      FAVORITE: "পছন্দের",
+      FAVOURITE: "পছন্দের",
       "REWARD CENTER": "পুরস্কার কেন্দ্র",
       "MANUAL REBATE": "ম্যানুয়াল রিবেট",
       "CUSTOMER SERVICE": "গ্রাহক সেবা",
@@ -282,6 +241,8 @@ const SidebarMenu = () => {
       FISHING: "Fishing",
       LOTTERY: "Lottery",
       FAVORITES: "Favorites",
+      FAVORITE: "Favorites",
+      FAVOURITE: "Favorites",
       "REWARD CENTER": "Reward Center",
       "MANUAL REBATE": "Manual Rebate",
       "CUSTOMER SERVICE": "Customer Service",
@@ -292,10 +253,18 @@ const SidebarMenu = () => {
 
   const translate = (key) => t?.[language]?.[key] || key;
 
+  const hotGamesItem = {
+    id: "hot-games",
+    label: translate("HOT GAMES"),
+    key: "HOT GAMES",
+    icon: <BsFire />,
+    path: "/hot-games",
+  };
+
   const dynamicMenuItems = categories.map((category) => {
     const enName = category?.categoryName?.en || "";
     const bnName = category?.categoryName?.bn || "";
-    const key = enName.toUpperCase();
+    const key = normalizeKey(enName);
 
     return {
       id: category._id,
@@ -304,9 +273,9 @@ const SidebarMenu = () => {
       icon: category?.iconUrl ? (
         <img src={getImageUrl(category.iconUrl)} alt={enName || bnName} />
       ) : (
-        iconMap[key] || <BsFire />
+        <BsStar />
       ),
-      path: `/category/${category._id}`,
+      path: getCategoryPath(category),
     };
   });
 
@@ -315,7 +284,13 @@ const SidebarMenu = () => {
   );
 
   const staticMenuItems = [
-    { id: 2, label: "রেফার", key: "রেফার", icon: <FaUserFriends />, path: "" },
+    {
+      id: 2,
+      label: "রেফার",
+      key: "রেফার",
+      icon: <FaUserFriends />,
+      path: "",
+    },
     {
       id: 4,
       label: "প্রমোশন",
@@ -323,9 +298,27 @@ const SidebarMenu = () => {
       icon: <BsGift />,
       path: "/promotions",
     },
-    { id: 6, label: "পুরস্কার", key: "পুরস্কার", icon: <FaTrophy />, path: "" },
-    { id: 10, label: "ভিআইপি", key: "ভিআইপি", icon: <BsStar />, path: "" },
-    { id: 12, label: "মিশন", key: "মিশন", icon: <FaUsers />, path: "" },
+    {
+      id: 6,
+      label: "পুরস্কার",
+      key: "পুরস্কার",
+      icon: <FaTrophy />,
+      path: "",
+    },
+    {
+      id: 10,
+      label: "ভিআইপি",
+      key: "ভিআইপি",
+      icon: <BsStar />,
+      path: "",
+    },
+    {
+      id: 12,
+      label: "মিশন",
+      key: "মিশন",
+      icon: <FaUsers />,
+      path: "",
+    },
     {
       id: 14,
       label: languageButtonLabel,
@@ -341,18 +334,26 @@ const SidebarMenu = () => {
       path: "/bg444.apk",
       download: true,
     },
-    { id: 18, label: "চ্যাট", key: "চ্যাট", icon: <BsChatDots />, path: "" },
+    {
+      id: 18,
+      label: "চ্যাট",
+      key: "চ্যাট",
+      icon: <BsChatDots />,
+      path: "",
+    },
   ];
+
+  const leftMenuItems = [hotGamesItem, ...dynamicMenuItems];
 
   return (
     <>
       <Container>
         <div className="space-y-2">
-          {dynamicMenuItems.map((item) => (
+          {leftMenuItems.map((item) => (
             <Link key={item.id} to={item.path}>
               <MenuItem>
                 <IconWrapper>{item.icon}</IconWrapper>
-                <Label>{translate(item.key) || item.label}</Label>
+                <Label>{item.label || translate(item.key)}</Label>
               </MenuItem>
             </Link>
           ))}

@@ -5,6 +5,129 @@ import GameHistory from "../models/GameHistory.js";
 
 const router = express.Router();
 
+const BET_TYPES = ["BET", "SETTLE", "CANCEL", "REFUND"];
+
+const escapeRegex = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+
+// GET /api/game-history?page=1&limit=50&search=&bet_type=BET
+router.get("/", async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+    const skip = (page - 1) * limit;
+
+    const search = String(req.query.search || "").trim();
+    const betType = String(req.query.bet_type || "").trim().toUpperCase();
+
+    const filter = {};
+
+    if (betType && BET_TYPES.includes(betType)) {
+      filter.bet_type = betType;
+    }
+
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), "i");
+      filter.$or = [
+        { transaction_id: regex },
+        { verification_key: regex },
+        { game_code: regex },
+        { provider_code: regex },
+        { username: regex },
+      ];
+    }
+
+    const [histories, total, summaryAgg] = await Promise.all([
+      GameHistory.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      GameHistory.countDocuments(filter),
+
+      GameHistory.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: "$bet_type",
+            count: { $sum: 1 },
+            amount: { $sum: "$amount" },
+          },
+        },
+      ]),
+    ]);
+
+    const summary = {
+      BET: { count: 0, amount: 0 },
+      SETTLE: { count: 0, amount: 0 },
+      CANCEL: { count: 0, amount: 0 },
+      REFUND: { count: 0, amount: 0 },
+      totalCount: total,
+      totalAmount: 0,
+    };
+
+    summaryAgg.forEach((item) => {
+      if (summary[item._id]) {
+        summary[item._id] = {
+          count: item.count || 0,
+          amount: item.amount || 0,
+        };
+        summary.totalAmount += item.amount || 0;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: histories,
+      summary,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+        hasPrevPage: page > 1,
+        hasNextPage: page < Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Game history fetch error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch game history",
+      error: error.message,
+    });
+  }
+});
+
+// GET /api/game-history/:id
+router.get("/:id", async (req, res) => {
+  try {
+    const history = await GameHistory.findById(req.params.id).lean();
+
+    if (!history) {
+      return res.status(404).json({
+        success: false,
+        message: "Game history not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: history,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch game history details",
+      error: error.message,
+    });
+  }
+});
+
+
+
 /**
  * GET /api/game-history/user/:userId
  */
