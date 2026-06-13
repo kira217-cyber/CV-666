@@ -8,7 +8,7 @@ import { TbRating18Plus } from "react-icons/tb";
 import { Link } from "react-router-dom";
 import { useContext } from "react";
 import { AuthContext } from "@/Context/AuthContext"; // Adjust path if needed
-import logo_footer from "../../../assets/logo.png";
+import logo_footer from "../../../assets/footer.png";
 
 const Footer = () => {
   const { language, adminHomeControl } = useContext(AuthContext);
@@ -211,6 +211,7 @@ const Footer = () => {
           {/* Footer Bottom */}
           <div className="mt-4 lg:mt-8">
             <div className="flex gap-2">
+              <img className="h-20 w-20" src={logo_footer} alt="FooterLogo" />
               <p className="text-[12px] md:text-base mb-4 text-[#e0fff7]">
                 {language === "bn" ? (
                   <>

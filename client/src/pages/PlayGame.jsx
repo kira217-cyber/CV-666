@@ -2,6 +2,7 @@ import { AuthContext } from "@/Context/AuthContext";
 import Modal from "@/components/home/modal/Modal";
 import Login from "@/components/shared/login/Login";
 import RegistrationModal from "@/components/shared/login/RegistrationModal";
+import Loading from "@/components/Loading/Loading"; // ✅ path ta tomar folder onujayi thik koro
 import axios from "axios";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { FaRedoAlt, FaTimes } from "react-icons/fa";
@@ -73,13 +74,21 @@ const PlayGame = () => {
         userId,
       });
 
-      if (!data?.gameUrl) {
+      const url =
+        data?.gameUrl ||
+        data?.url ||
+        data?.launchUrl ||
+        data?.data?.gameUrl ||
+        data?.data?.url ||
+        "";
+
+      if (!url) {
         toast.error(t.noUrl);
         navigate("/");
         return;
       }
 
-      setGameUrl(data.gameUrl);
+      setGameUrl(url);
     } catch (error) {
       toast.error(error?.response?.data?.message || t.failed);
       navigate("/");
@@ -95,25 +104,8 @@ const PlayGame = () => {
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black">
-      {loading && (
-        <div className="absolute inset-0 z-[10000] flex flex-col items-center justify-center bg-black text-white">
-          <div className="h-14 w-14 animate-spin rounded-full border-4 border-[#00ffaa]/30 border-t-[#00ffaa]" />
-
-          <p className="mt-5 text-center text-sm font-bold text-[#e0fff7]">
-            {t.preparing}
-          </p>
-
-          <button
-            type="button"
-            onClick={launchGame}
-            disabled={loading}
-            className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15 disabled:opacity-60"
-          >
-            <FaRedoAlt className={loading ? "animate-spin" : ""} />
-            {t.refresh}
-          </button>
-        </div>
-      )}
+      {/* ✅ Custom Loading */}
+      <Loading open={loading} text={t.preparing} />
 
       {!loading && gameUrl && (
         <iframe
@@ -125,10 +117,24 @@ const PlayGame = () => {
         />
       )}
 
+      {/* ✅ Optional refresh button only when not loading and no game url */}
+      {!loading && !gameUrl && isLoggedIn && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black text-white">
+          <button
+            type="button"
+            onClick={launchGame}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15"
+          >
+            <FaRedoAlt />
+            {t.refresh}
+          </button>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => navigate("/")}
-        className="fixed right-4 top-4 z-[10001] flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-black/70 text-white border border-white/20 hover:bg-red-600 transition-all"
+        className="fixed right-4 top-4 z-[1000000] flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/70 text-white transition-all hover:bg-red-600"
         title={t.close}
       >
         <FaTimes />

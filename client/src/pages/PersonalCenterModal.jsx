@@ -5,7 +5,7 @@ import { RxCross1 } from "react-icons/rx";
 import PersonalInformation from "@/components/PersonalCenterModal/PersonalInformation";
 
 const PersonalCenterModal = ({ isOpen, onClose, tab, name }) => {
-  console.log(isOpen, onClose, tab, name);
+  // console.log(isOpen, onClose, tab, name);
 
   const navigate = useNavigate();
 

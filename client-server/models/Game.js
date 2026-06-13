@@ -34,54 +34,12 @@ const GameSchema = new mongoose.Schema(
       index: true,
     },
 
-    isFavorites: {
+    isHome: {
       type: Boolean,
       default: false,
       index: true,
     },
 
-    isPoker: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isSlots: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isLiveCasino: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isFishing: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isEsports: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isLatest: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    isLottery: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-    
     isJackpot: {
       type: Boolean,
       default: false,
@@ -95,7 +53,7 @@ const GameSchema = new mongoose.Schema(
       index: true,
     },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 GameSchema.index({ providerDbId: 1, gameId: 1 }, { unique: true });

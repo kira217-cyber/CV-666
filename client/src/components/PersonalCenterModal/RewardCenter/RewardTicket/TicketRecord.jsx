@@ -1,8 +1,6 @@
 import { useContext } from "react";
-import { LanguageContext } from "../../../../Context/LanguageContext";
-
 import { RxCross1 } from "react-icons/rx";
-// import { motion } from "framer-motion";
+import { FaChevronLeft } from "react-icons/fa";
 import ReusableTabs from "../../BattingAccountProfitLoss/ReusableTabs";
 import { AuthContext } from "@/Context/AuthContext";
 
@@ -22,10 +20,10 @@ const TicketRecord = ({ activeModal, setActiveModal }) => {
           tableData: [
             {
               betTime: "11:00 AM",
-              betAmount: "$150",
-              validBet: "$140",
-              award: "$100",
-              profitLoss: "-$40",
+              betAmount: "৳ 150.00",
+              validBet: "৳ 140.00",
+              award: "৳ 100.00",
+              profitLoss: "-৳ 40.00",
               gameName: "Poker",
               gameNumber: "G456",
             },
@@ -38,6 +36,7 @@ const TicketRecord = ({ activeModal, setActiveModal }) => {
       ],
     },
   ];
+
   const filter = [
     { label: { en: "Vendor", bn: "বিক্রেতা" }, value: "vendor" },
     {
@@ -46,6 +45,7 @@ const TicketRecord = ({ activeModal, setActiveModal }) => {
     },
     { label: { en: "Ticket Type", bn: "টিকিটের ধরন" }, value: "ticketType" },
   ];
+
   const tabOptions = [
     { label: { en: "All", bn: "সব" }, value: "all" },
     { label: { en: "Red Rain", bn: "রেড রেন" }, value: "jili" },
@@ -65,48 +65,58 @@ const TicketRecord = ({ activeModal, setActiveModal }) => {
     },
   ];
 
+  if (!activeModal) return null;
+
   return (
-    <div>
-      {/* Item Buttons */}
-
-      {/* Modal */}
-      {activeModal && (
-        <div
-          className="fixed  inset-0 z-50 flex justify-end bg-black bg-opacity-50  overflow-hidden"
-          onClick={() => setActiveModal(null)}
-        >
-          <div className="relative hidden lg:flex flex-col justify-center gap-4">
-            <div
-              className="bg-white w-full p-2 absolute top-0"
-              style={{
-                clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 66%)",
-              }}
-            >
-              <button
-                onClick={() => setActiveModal(null)}
-                className="text-white text-sm rounded-full p-1 bg-red-600"
-              >
-                <RxCross1 />
-              </button>
-            </div>
-            <h3 className=" ">Record</h3>
-          </div>
+    <div
+      className="fixed inset-0 z-[99999] flex justify-end bg-black/60 overflow-hidden"
+      onClick={() => setActiveModal(null)}
+    >
+      <div
+        className="flex w-full lg:w-auto h-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative hidden lg:flex flex-col justify-center gap-4">
           <div
-            className="bg-white w-auto  p-4  shadow-lg relative"
-            // onClick={(e) => e.stopPropagation()}
-            // initial={{ x: "100%" }}
-            // animate={{ x: 0 }}
-            // exit={{ x: "-100%" }}
-            // transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="bg-white w-full p-2 absolute top-0"
+            style={{
+              clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 66%)",
+            }}
           >
-            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => setActiveModal(null)}
+              className="text-white text-sm rounded-full p-1 bg-red-600"
+            >
+              <RxCross1 />
+            </button>
+          </div>
 
-            {/* Modal title */}
-            <h2 className="text-center text-lg font-semibold mb-4 text-gray-800">
+          <h3>Record</h3>
+        </div>
+
+        <div className="bg-white w-full lg:w-[760px] h-full p-0 lg:p-4 shadow-lg relative overflow-y-auto">
+          <div className="lg:hidden sticky top-0 z-10 flex items-center bg-informationBG px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setActiveModal(null)}
+              className="text-white"
+            >
+              <FaChevronLeft />
+            </button>
+
+            <h2 className="text-center text-sm font-semibold text-white flex-1">
               {language === "bn" ? "টিকিটের রেকর্ড" : "Ticket Record"}
             </h2>
 
-            {/* Modal content */}
+            <span className="w-4" />
+          </div>
+
+          <h2 className="hidden lg:block text-center text-lg font-semibold mb-4 text-gray-800">
+            {language === "bn" ? "টিকিটের রেকর্ড" : "Ticket Record"}
+          </h2>
+
+          <div className="p-2 lg:p-0">
             <ReusableTabs
               data={tabData}
               filterOptions={tabOptions}
@@ -114,7 +124,7 @@ const TicketRecord = ({ activeModal, setActiveModal }) => {
             />
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

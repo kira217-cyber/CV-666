@@ -194,12 +194,12 @@ const PersonalInformation = ({ tab = "tab1" }) => {
         </div>
       ),
     },
-    {
-      id: "tab2",
-      label: language === "bn" ? "ম্যানুয়াল জমা" : "Manual Deposit",
-      icon: <FaPiggyBank />,
-      content: <Deposit />,
-    },
+    // {
+    //   id: "tab2",
+    //   label: language === "bn" ? "ম্যানুয়াল জমা" : "Manual Deposit",
+    //   icon: <FaPiggyBank />,
+    //   content: <Deposit />,
+    // },
     {
       id: "tab3",
       label: language === "bn" ? "অটোমেটিক জমা" : "Auto Deposit",
@@ -260,12 +260,12 @@ const PersonalInformation = ({ tab = "tab1" }) => {
       icon: <FaRedoAlt />,
       content: <Rebate />,
     },
-    {
-      id: "tab12",
-      label: language === "bn" ? "আমার অ্যাকাউন্ট" : "My Account",
-      icon: <FaRedoAlt />,
-      content: <AccountPhone />,
-    },
+    // {
+    //   id: "tab12",
+    //   label: language === "bn" ? "আমার অ্যাকাউন্ট" : "My Account",
+    //   icon: <FaRedoAlt />,
+    //   content: <AccountPhone />,
+    // },
   ];
 
   useEffect(() => {

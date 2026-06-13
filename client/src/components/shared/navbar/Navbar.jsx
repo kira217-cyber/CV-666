@@ -24,6 +24,7 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [referralFromUrl, setReferralFromUrl] = useState("");
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -41,7 +42,7 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
 
   const [isHovering, setIsHovering] = useState(false);
 
-  console.log("Admin Home Control in Navbar:", adminHomeControl);
+  // console.log("Admin Home Control in Navbar:", adminHomeControl);
 
   // Referral from URL
   useEffect(() => {
@@ -111,14 +112,14 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
       icon: <BiSolidMessageRounded />,
       link: "/information#tab9",
     },
+    // {
+    //   id: "tab2",
+    //   label: "Deposit",
+    //   icon: <RiLuggageDepositFill />,
+    //   link: "/information#tab2",
+    // },
     {
-      id: "tab2",
-      label: "Deposit",
-      icon: <RiLuggageDepositFill />,
-      link: "/information#tab2",
-    },
-    {
-      id: "tab2",
+      id: "tab3",
       label: "Auto Deposit",
       icon: <RiLuggageDepositFill />,
       link: "/information#tab3",
@@ -141,10 +142,10 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
 
   const actions = [
     {
-      id: "tab2",
+      id: "tab3",
       label: "Deposit",
       icon: <RiLuggageDepositFill />,
-      link: "/information#tab2",
+      link: "/information#tab3",
     },
     {
       id: "tab3",
@@ -180,7 +181,7 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
                     ? `${import.meta.env.VITE_BACKEND_API}uploads/${adminHomeControl.websiteLogoWhite}`
                     : "" // fallback to your static import
                 }
-                alt="Website Logo"
+                alt="Logo"
               />
             </Link>
           </div>
@@ -190,11 +191,15 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
             {user ? (
               <>
                 {/* Profile Dropdown */}
-                <div className="relative z-50">
+                {/* Profile Dropdown */}
+                <div
+                  className="relative z-50"
+                  onMouseEnter={() => setIsProfileOpen(true)}
+                  onMouseLeave={() => setIsProfileOpen(false)}
+                >
                   <div
                     className="flex items-center gap-1.5 bg-yellow-400 p-1 pr-2 rounded-xl cursor-pointer"
-                    onMouseEnter={() => setIsHovering(true)}
-                    onMouseLeave={() => setIsHovering(false)}
+                    onClick={() => setIsProfileOpen((prev) => !prev)}
                   >
                     <img
                       src={
@@ -207,22 +212,20 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
                     <FaCaretDown className="text-black" />
                   </div>
 
-                  {isHovering && (
-                    <div
-                      className="absolute left-0 p-1 w-full lg:w-52 min-w-[150px] bg-[#00303b] text-white rounded-xl border border-[#00b4c0] shadow-xl"
-                      onMouseEnter={() => setIsHovering(true)}
-                      onMouseLeave={() => setIsHovering(false)}
-                    >
+                  {isProfileOpen && (
+                    <div className="absolute right-0 top-full mt-2 p-1 w-52 min-w-[180px] bg-[#00303b] text-white rounded-xl border border-[#00b4c0] shadow-xl">
                       {menuItems.map((item, index) => (
                         <Link
                           to={item.link || "#"}
                           key={index}
                           className="flex items-center gap-2 px-4 py-2.5 hover:bg-[#00464f] text-xs sm:text-sm md:text-base lg:text-lg border-b border-[#00464f] last:border-b-0 transition-colors rounded-lg"
                           onClick={(e) => {
+                            setIsProfileOpen(false);
+
                             if (item.onClick) {
                               e.preventDefault();
                               item.onClick();
-                            } else {
+                            } else if (!item.target) {
                               setIsInformationModalOpen(true);
                             }
                           }}
@@ -240,14 +243,14 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
 
                 {/* Balance */}
                 <div className="flex gap-2 items-center px-4 py-1 sm:py-1.5 text-[#23ffc8] bg-[#002632] border border-[#006165] rounded-md sm:rounded-xl">
-                  <FaIdCardClip className="text-white" />
+                  {/* <FaIdCardClip className="text-white" /> */}
                   <div className="flex gap-2 items-center">
                     <div className="flex gap-0.5 items-center border-b border-[#002632] hover:border-[#23ffc8] duration-300">
                       <FaBangladeshiTakaSign size={14} />
                       {isBalanceLoading ? (
                         <div className="h-4 w-12 bg-gray-700 rounded animate-pulse"></div>
                       ) : (
-                        <span>{balance || 0}</span>
+                        <span>{Number(balance || 0).toFixed(1)}</span>
                       )}
                     </div>
                     <TfiReload

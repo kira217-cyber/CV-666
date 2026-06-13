@@ -14,7 +14,7 @@ import { FaUserFriends, FaTrophy, FaUsers } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import styled from "styled-components";
 
-const API = import.meta.env.VITE_API_URL
+const API = import.meta.env.VITE_API_URL;
 
 const getImageUrl = (path = "") => {
   if (!path) return "";
@@ -22,7 +22,6 @@ const getImageUrl = (path = "") => {
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
-/* ────────────────────── Styled Components ────────────────────── */
 const Container = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -83,15 +82,12 @@ const Label = styled.p`
 
 const ModalOverlay = styled.div`
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 99999;
 `;
 
 const ModalContent = styled.div`
@@ -124,7 +120,6 @@ const LanguageOption = styled.div`
   border-radius: 8px;
   margin-bottom: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
 
   &:hover {
     background: linear-gradient(to right, #0a6670, #00404c);
@@ -146,18 +141,17 @@ const LanguageOption = styled.div`
 const normalizeKey = (value = "") =>
   String(value).trim().toUpperCase().replace(/_/g, "-").replace(/\s+/g, " ");
 
-const getCategoryPath = (category) => {
-  const enName = normalizeKey(category?.categoryName?.en);
-
-  if (enName === "FAVOURITE" || enName === "FAVORITE") {
-    return `/category/${category._id}`;
-  }
-
-  return `/category/${category._id}`;
-};
+const getCategoryPath = (category) => `/category/${category._id}`;
 
 const SidebarMenu = () => {
-  const { language, setLanguage } = useContext(AuthContext);
+  const {
+    language,
+    setLanguage,
+    user,
+    setInitialTab,
+    setIsInformationModalOpen,
+    setIsLoginModalOpen,
+  } = useContext(AuthContext);
 
   const [categories, setCategories] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -198,6 +192,20 @@ const SidebarMenu = () => {
     closeModal();
   };
 
+  const openInformationTab = (tabId) => {
+    if (!user) {
+      if (setIsLoginModalOpen) setIsLoginModalOpen(true);
+      return;
+    }
+
+    if (setInitialTab) setInitialTab(tabId);
+    if (setIsInformationModalOpen) setIsInformationModalOpen(true);
+  };
+
+  const openDownload = () => {
+    window.open("https://oracleapkstore.com/", "_blank", "noopener,noreferrer");
+  };
+
   const t = {
     bn: {
       রেফার: "রেফার",
@@ -218,9 +226,6 @@ const SidebarMenu = () => {
       FAVORITES: "পছন্দের",
       FAVORITE: "পছন্দের",
       FAVOURITE: "পছন্দের",
-      "REWARD CENTER": "পুরস্কার কেন্দ্র",
-      "MANUAL REBATE": "ম্যানুয়াল রিবেট",
-      "CUSTOMER SERVICE": "গ্রাহক সেবা",
       LANGUAGE_BN: "বাংলা",
       LANGUAGE_EN: "English",
     },
@@ -243,9 +248,6 @@ const SidebarMenu = () => {
       FAVORITES: "Favorites",
       FAVORITE: "Favorites",
       FAVOURITE: "Favorites",
-      "REWARD CENTER": "Reward Center",
-      "MANUAL REBATE": "Manual Rebate",
-      "CUSTOMER SERVICE": "Customer Service",
       LANGUAGE_BN: "Bangla",
       LANGUAGE_EN: "English",
     },
@@ -289,7 +291,7 @@ const SidebarMenu = () => {
       label: "রেফার",
       key: "রেফার",
       icon: <FaUserFriends />,
-      path: "",
+      action: () => openInformationTab("tab9"),
     },
     {
       id: 4,
@@ -303,36 +305,34 @@ const SidebarMenu = () => {
       label: "পুরস্কার",
       key: "পুরস্কার",
       icon: <FaTrophy />,
-      path: "",
+      action: () => openInformationTab("tab8"),
     },
     {
       id: 10,
       label: "ভিআইপি",
       key: "ভিআইপি",
       icon: <BsStar />,
-      path: "",
+      action: () => openInformationTab("tab1"),
     },
     {
       id: 12,
       label: "মিশন",
       key: "মিশন",
       icon: <FaUsers />,
-      path: "",
+      action: () => openInformationTab("tab8"),
     },
     {
       id: 14,
       label: languageButtonLabel,
       icon: <BsGlobe />,
-      path: "",
-      onClick: openLanguageModal,
+      action: openLanguageModal,
     },
     {
       id: 16,
       label: "ডাউনলোড",
       key: "ডাউনলোড",
       icon: <BsDownload />,
-      path: "/bg444.apk",
-      download: true,
+      action: openDownload,
     },
     {
       id: 18,
@@ -361,26 +361,24 @@ const SidebarMenu = () => {
 
         <div className="space-y-2">
           {staticMenuItems.map((item) => (
-            <div key={item.id} onClick={item.onClick}>
-              {item.onClick ? (
-                <MenuItem>
+            <div key={item.id}>
+              {item.action ? (
+                <MenuItem onClick={item.action}>
                   <IconWrapper>{item.icon}</IconWrapper>
-                  <Label>{item.label}</Label>
+                  <Label>{item.label || translate(item.key)}</Label>
                 </MenuItem>
-              ) : item.download ? (
-                <a href={item.path} download>
-                  <MenuItem>
-                    <IconWrapper>{item.icon}</IconWrapper>
-                    <Label>{translate(item.key) || item.label}</Label>
-                  </MenuItem>
-                </a>
-              ) : (
+              ) : item.path ? (
                 <Link to={item.path}>
                   <MenuItem>
                     <IconWrapper>{item.icon}</IconWrapper>
                     <Label>{translate(item.key) || item.label}</Label>
                   </MenuItem>
                 </Link>
+              ) : (
+                <MenuItem>
+                  <IconWrapper>{item.icon}</IconWrapper>
+                  <Label>{translate(item.key) || item.label}</Label>
+                </MenuItem>
               )}
             </div>
           ))}

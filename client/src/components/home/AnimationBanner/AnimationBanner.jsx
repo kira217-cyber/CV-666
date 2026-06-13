@@ -8,7 +8,7 @@ import { AuthContext } from "@/Context/AuthContext";
 import axios from "axios";
 
 const API =
-  import.meta.env.VITE_REACT_APP_BACKEND_API2 || "http://localhost:5002";
+  import.meta.env.VITE_API_URL
 
 const ORACLE_BASE = "https://api.oraclegames.live/api";
 const ORACLE_KEY = import.meta.env.VITE_ORACLE_TOKEN;
@@ -19,7 +19,7 @@ const getUploadImage = (path = "") => {
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
-export default function AnimationBanner({ data }) {
+export default function AnimationBanner() {
   const navigate = useNavigate();
   const [gamesData, setGamesData] = useState([]);
   const [counter, setCounter] = useState(123456789);

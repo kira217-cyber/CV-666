@@ -333,7 +333,7 @@ const HotsGame = () => {
 
             <button
               onClick={() => handlePlayClick(selectedGame)}
-              className="w-full py-4 bg-gradient-to-r from-[#2563eb] to-[#3b82f6] text-white text-lg font-bold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 cursor-pointer"
+              className="w-full py-1 md:py-4 bg-gradient-to-r from-[#2563eb] to-[#3b82f6] text-white text-lg font-bold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 cursor-pointer"
             >
               {translate("playGame")}
             </button>

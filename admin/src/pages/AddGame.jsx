@@ -3,12 +3,10 @@ import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
-  FaBolt,
-  FaDice,
   FaEdit,
-  FaFish,
   FaFire,
   FaGamepad,
+  FaHome,
   FaImage,
   FaSave,
   FaSearch,
@@ -41,68 +39,12 @@ const FLAG_FIELDS = [
     accent: "accent-red-500",
   },
   {
-    key: "isFavorites",
-    label: "Favorites",
-    icon: <FaGamepad />,
-    activeClass: "bg-blue-500 text-white",
-    textClass: "text-blue-200",
-    accent: "accent-blue-500",
-  },
-  {
-    key: "isPoker",
-    label: "Poker",
-    icon: <FaDice />,
-    activeClass: "bg-yellow-500 text-black",
-    textClass: "text-yellow-200",
-    accent: "accent-yellow-500",
-  },
-  {
-    key: "isSlots",
-    label: "Slots",
-    icon: <FaGamepad />,
-    activeClass: "bg-purple-500 text-white",
-    textClass: "text-purple-200",
-    accent: "accent-purple-500",
-  },
-  {
-    key: "isLiveCasino",
-    label: "Live Casino",
-    icon: <FaGamepad />,
-    activeClass: "bg-pink-500 text-white",
-    textClass: "text-pink-200",
-    accent: "accent-pink-500",
-  },
-  {
-    key: "isFishing",
-    label: "Fishing",
-    icon: <FaFish />,
-    activeClass: "bg-cyan-500 text-white",
-    textClass: "text-cyan-200",
-    accent: "accent-cyan-500",
-  },
-  {
-    key: "isEsports",
-    label: "E-Sports",
-    icon: <FaTrophy />,
-    activeClass: "bg-orange-500 text-white",
-    textClass: "text-orange-200",
-    accent: "accent-orange-500",
-  },
-  {
-    key: "isLatest",
-    label: "Latest",
-    icon: <FaBolt />,
-    activeClass: "bg-lime-500 text-black",
-    textClass: "text-lime-200",
-    accent: "accent-lime-500",
-  },
-  {
-    key: "isLottery",
-    label: "Lottery",
-    icon: <FaDice />,
-    activeClass: "bg-indigo-500 text-white",
-    textClass: "text-indigo-200",
-    accent: "accent-indigo-500",
+    key: "isHome",
+    label: "Home",
+    icon: <FaHome />,
+    activeClass: "bg-emerald-500 text-white",
+    textClass: "text-emerald-200",
+    accent: "accent-emerald-500",
   },
   {
     key: "isJackpot",
@@ -450,6 +392,9 @@ const AddGame = () => {
         providerDbId: selectedProviderDbId,
         gameId: oracleGameId,
         status: "active",
+        isHot: false,
+        isHome: false,
+        isJackpot: false,
       };
 
       const { data } = await axios.post(`${API}/api/games`, payload);
@@ -495,6 +440,9 @@ const AddGame = () => {
             providerDbId: selectedProviderDbId,
             gameId: oracleGameId,
             status: "active",
+            isHot: false,
+            isHome: false,
+            isJackpot: false,
           });
 
           setSavedGames((prev) => [data?.data, ...prev]);
@@ -981,7 +929,7 @@ const AddGame = () => {
 
                           {activeFlags.length > 0 && (
                             <div className="absolute left-3 top-3 flex max-w-[70%] flex-wrap gap-1.5">
-                              {activeFlags.slice(0, 3).map((flag) => (
+                              {activeFlags.map((flag) => (
                                 <span
                                   key={flag.key}
                                   className={`rounded-full px-3 py-1 text-xs font-black shadow-lg ${flag.activeClass}`}

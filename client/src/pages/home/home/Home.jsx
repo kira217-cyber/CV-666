@@ -73,8 +73,8 @@ const Home = () => {
       id: "tab2",
       label: "Deposit",
       icon: <RiLuggageDepositFill />,
-      link: "/information#tab2",
-      tab: "tab2",
+      link: "/information#tab3",
+      tab: "tab3",
     },
     {
       id: "tab3",
@@ -277,11 +277,7 @@ const Home = () => {
       />
 
       <HotsGame />
-      <AnimationBanner data={data} />
-      {homeGameMenu &&
-        homeGameMenu?.menuOptions?.map((item, index) => (
-          <Slots data={item} key={index} games={data} />
-        ))}
+      <AnimationBanner />
       <CategoryGames />
     </div>
   );

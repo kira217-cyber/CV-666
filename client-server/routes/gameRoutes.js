@@ -8,18 +8,7 @@ import upload from "../config/multer.js";
 
 const router = express.Router();
 
-const FLAG_FIELDS = [
-  "isHot",
-  "isFavorites",
-  "isPoker",
-  "isSlots",
-  "isLiveCasino",
-  "isFishing",
-  "isEsports",
-  "isLatest",
-  "isLottery",
-  "isJackpot",
-];
+const FLAG_FIELDS = ["isHot", "isHome", "isJackpot"];
 
 const toBool = (value) => {
   return value === true || value === "true" || value === "1" || value === 1;
@@ -30,7 +19,6 @@ const deleteFile = (filePath = "") => {
     if (!filePath) return;
 
     const cleanPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
-
     const fullPath = path.join(process.cwd(), cleanPath);
 
     if (fs.existsSync(fullPath)) {
@@ -85,9 +73,11 @@ router.post("/", async (req, res) => {
       });
     }
 
+    const trimmedGameId = String(gameId).trim();
+
     const exists = await Game.findOne({
       providerDbId,
-      gameId: String(gameId).trim(),
+      gameId: trimmedGameId,
     });
 
     if (exists) {
@@ -97,12 +87,20 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const game = await Game.create({
+    const payload = {
       categoryId,
       providerDbId,
-      gameId: String(gameId).trim(),
+      gameId: trimmedGameId,
       status: status === "inactive" ? "inactive" : "active",
+    };
+
+    FLAG_FIELDS.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        payload[field] = toBool(req.body[field]);
+      }
     });
+
+    const game = await Game.create(payload);
 
     const populatedGame = await Game.findById(game._id)
       .populate("categoryId")
@@ -131,21 +129,8 @@ router.post("/", async (req, res) => {
 // GET ALL GAMES
 router.get("/", async (req, res) => {
   try {
-    const {
-      categoryId,
-      providerDbId,
-      status,
-      isHot,
-      isFavorites,
-      isPoker,
-      isSlots,
-      isLiveCasino,
-      isFishing,
-      isEsports,
-      isLatest,
-      isLottery,
-      isJackpot,
-    } = req.query;
+    const { categoryId, providerDbId, status, isHot, isHome, isJackpot } =
+      req.query;
 
     const query = {};
 
@@ -155,14 +140,7 @@ router.get("/", async (req, res) => {
 
     const flagQuery = {
       isHot,
-      isFavorites,
-      isPoker,
-      isSlots,
-      isLiveCasino,
-      isFishing,
-      isEsports,
-      isLatest,
-      isLottery,
+      isHome,
       isJackpot,
     };
 
@@ -192,7 +170,7 @@ router.get("/", async (req, res) => {
 // GET ACTIVE GAMES
 router.get("/active", async (req, res) => {
   try {
-    const { categoryId, providerDbId } = req.query;
+    const { categoryId, providerDbId, isHot, isHome, isJackpot } = req.query;
 
     const query = {
       status: "active",
@@ -200,6 +178,18 @@ router.get("/active", async (req, res) => {
 
     if (categoryId) query.categoryId = categoryId;
     if (providerDbId) query.providerDbId = providerDbId;
+
+    const flagQuery = {
+      isHot,
+      isHome,
+      isJackpot,
+    };
+
+    Object.entries(flagQuery).forEach(([key, value]) => {
+      if (value !== undefined) {
+        query[key] = toBool(value);
+      }
+    });
 
     const games = await Game.find(query)
       .populate("categoryId")

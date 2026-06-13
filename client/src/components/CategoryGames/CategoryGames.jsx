@@ -4,7 +4,7 @@ import { Navigation, Grid } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/grid";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -132,9 +132,6 @@ const GameSection = ({ category, games, onPlay }) => {
                 src={getGameImage(game)}
                 alt={getGameName(game)}
                 className="w-full h-full object-cover rounded-xl border-2 border-white"
-                // onError={(e) => {
-                //   e.currentTarget.src = "/placeholder-game.png";
-                // }}
               />
 
               <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700 px-1 uppercase">
@@ -145,7 +142,7 @@ const GameSection = ({ category, games, onPlay }) => {
                   }}
                   className="py-0.5 px-1 text-[16px] font-bold text-[#b64100] bg-[#ffd900] rounded-md mb-1 transform scale-50 group-hover:scale-100 group-hover:py-1 group-hover:px-2 group-hover:text-[16px] transition-all duration-700 ease-in-out cursor-pointer"
                 >
-                  {language === "bn" ? "এখন খেলুন" : "PLAY NOW"}
+                  {language === "bn" ? "খেলুন" : "PLAY"}
                 </button>
 
                 <p className="text-white text-[10px] font-semibold text-center line-clamp-2">
@@ -214,11 +211,18 @@ const CategoryGames = () => {
       const result = await Promise.all(
         activeCategories.map(async (category) => {
           try {
-            const gameRes = await axios.get(
-              `${API}/api/games?status=active&categoryId=${category._id}`,
-            );
+            const gameRes = await axios.get(`${API}/api/games`, {
+              params: {
+                status: "active",
+                categoryId: category._id,
+                isHome: true,
+              },
+            });
 
-            const games = gameRes?.data?.data || [];
+            const games = [...(gameRes?.data?.data || [])].sort((a, b) => {
+              return new Date(a?.createdAt || 0) - new Date(b?.createdAt || 0);
+            });
+
             const withOracle = await fetchOracleDetails(games);
 
             return {
@@ -362,9 +366,6 @@ const CategoryGames = () => {
                 src={getGameImage(selectedGame)}
                 className="w-24 h-24 object-cover rounded-xl shadow-lg border-2 border-[#00ffaa] -mt-12"
                 alt={getGameName(selectedGame)}
-                // onError={(e) => {
-                //   e.currentTarget.src = "/placeholder-game.png";
-                // }}
               />
 
               <h3 className="text-lg font-bold text-gray-800 truncate">

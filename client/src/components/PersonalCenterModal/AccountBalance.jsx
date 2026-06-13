@@ -8,18 +8,16 @@ const AccountBalance = ({
   return (
     <div className="px-2 mt-3">
       <div className=" px-4 py-3 flex justify-between items-center">
-
         {/* LEFT MONEY */}
         <div className="flex items-center text-3xl font-semibold text-black">
           <span className="text-4xl mr-1">৳</span>
           <span className="text-gray-800">
-            {loading ? "..." : showBalance ? balance : "**"}
+            {loading ? "..." : showBalance ? Number(balance).toFixed(2) : "**"}
           </span>
         </div>
 
         {/* RIGHT ICONS */}
         <div className="flex items-center gap-3">
-
           {/* RELOAD */}
           <button onClick={reloadBalance}>
             {loading ? (

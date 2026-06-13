@@ -66,7 +66,7 @@ const MobileDepositWithdrawButton = () => {
 
   return (
     <Container>
-      <Btn onClick={() => handleClick("tab2")}>
+      <Btn onClick={() => handleClick("tab3")}>
         <FaPlusCircle /> {translate("Deposit")}
       </Btn>
 

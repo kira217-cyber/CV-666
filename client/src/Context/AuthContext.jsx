@@ -10,26 +10,31 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const [isInformationModalOpen, setIsInformationModalOpen] = useState(false);
   const [initialTab, setInitialTab] = useState("tab1");
+
+  // Global login modal state
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
   const [language, setLanguage] = useState(
     localStorage.getItem("sidebarLang") || "bn",
   );
 
-  // ── New state for admin home control data ──
   const [adminHomeControl, setAdminHomeControl] = useState(null);
 
-  console.log("UserID in AuthContext:", userId);
-
-  // Fetch single user data
   const fetchUser = async (userId) => {
     try {
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/admin?id=${userId}`,
       );
+
       if (!res.ok) throw new Error("Failed to fetch user");
+
       const data = await res.json();
+
       setUserId(data.user._id);
+
       return data.user;
     } catch (err) {
       console.error("Fetch user error:", err);
@@ -37,15 +42,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Refresh only balance
   const refreshBalance = async () => {
     const storedUserId = localStorage.getItem("userId");
-    console.log("Refreshing balance for userId:", storedUserId);
+
     if (!storedUserId) return;
 
     setIsBalanceLoading(true);
+
     try {
       const fetchedUser = await fetchUser(storedUserId);
+
       if (fetchedUser) {
         setBalance(fetchedUser.balance || 0);
       }
@@ -56,14 +62,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // ── New: Fetch admin home control data ──
   const fetchAdminHomeControl = async () => {
     try {
       const res = await axios.get(
         `${import.meta.env.VITE_BACKEND_API}api/v1/admin/admin-home-control`,
       );
+
       if (res.data) {
-        console.log("Admin Home Control Data:", res.data);
         setAdminHomeControl(res.data);
       }
     } catch (err) {
@@ -78,11 +83,11 @@ export const AuthProvider = ({ children }) => {
     const initialize = async () => {
       setLoading(true);
 
-      // Fetch admin home control data (independent of user login)
       await fetchAdminHomeControl();
 
       if (storedUserId) {
         const fetchedUser = await fetchUser(storedUserId);
+
         if (fetchedUser) {
           setUser(fetchedUser);
           setBalance(fetchedUser.balance || 0);
@@ -101,7 +106,12 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null);
+    setUserId(null);
     setBalance(0);
+    setIsInformationModalOpen(false);
+    setInitialTab("tab1");
+    setIsLoginModalOpen(false);
+
     localStorage.removeItem("userId");
     localStorage.removeItem("user");
   };
@@ -111,21 +121,31 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         setUser,
+
         loading,
         logout,
+
         balance,
+        setBalance,
         refreshBalance,
         isBalanceLoading,
+
         language,
         setLanguage,
+
         userId,
-        setBalance,
-        setIsInformationModalOpen,
+        setUserId,
+
         isInformationModalOpen,
+        setIsInformationModalOpen,
+
         initialTab,
         setInitialTab,
-        // ── New value added to context ──
-        adminHomeControl, // Now available in any component via useContext
+
+        isLoginModalOpen,
+        setIsLoginModalOpen,
+
+        adminHomeControl,
       }}
     >
       {children}

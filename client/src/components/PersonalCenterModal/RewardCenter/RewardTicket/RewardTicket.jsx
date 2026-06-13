@@ -8,7 +8,6 @@ const RewardTicket = () => {
   const { language = "en" } = useContext(AuthContext);
   const [activeModal, setActiveModal] = useState(null);
 
-  // ভাষা অনুযায়ী টেক্সট
   const text = {
     bn: {
       receiveCenter: "প্রাপ্তি কেন্দ্র",
@@ -20,18 +19,18 @@ const RewardTicket = () => {
     },
   };
 
-  const t = text[language];
+  const t = text[language] || text.en;
 
   return (
-    <div className="bg-white">
-      {/* Title Part */}
-      <div className="text-[#4c11d3] py-1 flex gap-12 items-center">
+    <div className="bg-white w-full">
+      <div className="text-[#4c11d3] py-2 flex flex-col sm:flex-row sm:gap-8 lg:gap-12 sm:items-center gap-2 px-2">
         <p className="text-black border-l-4 px-2 border-[#4c11d3] font-medium">
           {t.receiveCenter}
         </p>
 
-        <div
-          className="flex gap-2 px-4 cursor-pointer rounded-full bg-opacity-10 hover:bg-opacity-100 bg-[#4c11d3] transition-all duration-300 group"
+        <button
+          type="button"
+          className="flex gap-2 px-4 py-1 cursor-pointer rounded-full bg-[#4c11d3]/10 hover:bg-[#4c11d3] transition-all duration-300 group w-fit"
           onClick={() => setActiveModal("TicketRecord")}
         >
           <img
@@ -39,16 +38,15 @@ const RewardTicket = () => {
             alt="Ticket Record"
             className="w-5 h-5"
           />
-          <p className="text-black group-hover:text-white font-medium">
+
+          <p className="text-black group-hover:text-white font-medium text-sm sm:text-base">
             {t.ticketRecord}
           </p>
-        </div>
+        </button>
       </div>
 
-      {/* Receive Ticket Section */}
       <TicketReceive />
 
-      {/* Ticket Record Modal */}
       <TicketRecord activeModal={activeModal} setActiveModal={setActiveModal} />
     </div>
   );

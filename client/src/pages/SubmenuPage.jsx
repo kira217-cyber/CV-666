@@ -512,7 +512,7 @@ const SubmenuPage = () => {
                 )}
 
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-60 opacity-0 group-hover:opacity-100 transition-opacity duration-500 px-2">
-                  <div className="py-2 px-4 text-sm md:text-base font-bold text-[#b64100] bg-[#ffd900] rounded-lg shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                  <div className="py-1 px-2 md:py-2 md:px-4 text-[12px] md:text-base font-bold text-[#b64100] bg-[#ffd900] rounded-lg shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
                     {language === "bn" ? "এখন খেলুন" : "PLAY NOW"}
                   </div>
 
