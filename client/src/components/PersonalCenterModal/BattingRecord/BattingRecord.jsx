@@ -26,7 +26,6 @@ const BattingRecord = () => {
 
   const API_URL = import.meta.env.VITE_API_URL;
   const itemsPerPage = 10;
-
   const isBn = language === "bn";
 
   const fetchGameHistory = async () => {
@@ -86,13 +85,13 @@ const BattingRecord = () => {
 
   const tableHeaders = [
     { label: { en: "Bet Time", bn: "বেট সময়" } },
-    { label: { en: "Type", bn: "টাইপ" } },
+    { label: { en: "Result", bn: "রেজাল্ট" } },
     { label: { en: "Bet Amount", bn: "বেট পরিমাণ" } },
     { label: { en: "Valid Bet", bn: "বৈধ বেট" } },
     { label: { en: "Award", bn: "অর্থ পুরস্কার" } },
     { label: { en: "Profit Loss", bn: "লাভ ক্ষতি" } },
-    { label: { en: "Game Name", bn: "গেম নাম" } },
-    { label: { en: "Game Number", bn: "গেম নম্বর" } },
+    { label: { en: "Game UID", bn: "গেম UID" } },
+    { label: { en: "Game Round", bn: "গেম রাউন্ড" } },
   ];
 
   const formatDateTime = (date) => {
@@ -110,36 +109,42 @@ const BattingRecord = () => {
     });
   };
 
-  const getProfitLoss = (row) => {
-    const amount = Number(row.amount || 0);
+  const getResultType = (row) => String(row?.resultType || "").toLowerCase();
 
-    if (row.bet_type === "BET") return -amount;
-    if (row.bet_type === "SETTLE") return amount;
-    if (row.status === "won") return amount;
-    if (row.status === "lost") return -amount;
+  const getBetAmount = (row) =>
+    Number(row?.bet_amount ?? row?.betAmount ?? row?.amount ?? 0);
 
-    return 0;
-  };
+  const getWinAmount = (row) =>
+    Number(row?.win_amount ?? row?.winAmount ?? row?.award ?? 0);
 
-  const getAward = (row) => {
-    if (row.bet_type === "SETTLE" && Number(row.amount || 0) > 0) {
-      return Number(row.amount || 0);
-    }
+  const getNetAmount = (row) =>
+    Number(row?.net_amount ?? row?.netAmount ?? row?.profitLoss ?? 0);
 
-    if (row.status === "won") {
-      return Number(row.amount || 0);
-    }
+  const getProfitLoss = (row) => getNetAmount(row);
 
-    return 0;
-  };
+  const getAward = (row) => getWinAmount(row);
 
-  const totalBet = gameHistory.reduce((sum, h) => {
-    if (h.bet_type === "BET") return sum + Number(h.amount || 0);
-    return sum;
-  }, 0);
-
+  const totalBet = gameHistory.reduce((sum, h) => sum + getBetAmount(h), 0);
   const totalAward = gameHistory.reduce((sum, h) => sum + getAward(h), 0);
   const profitLoss = gameHistory.reduce((sum, h) => sum + getProfitLoss(h), 0);
+
+  const getResultLabel = (row) => {
+    const result = getResultType(row);
+    if (result === "win") return isBn ? "জিতেছে" : "WIN";
+    if (result === "loss") return isBn ? "হেরেছে" : "LOSS";
+    if (result === "push") return isBn ? "পুশ" : "PUSH";
+    return "-";
+  };
+
+  const resultClass = (row) => {
+    const result = getResultType(row);
+
+    if (result === "win") return "bg-green-50 text-green-600";
+    if (result === "loss") return "bg-red-50 text-red-600";
+    if (result === "push") return "bg-yellow-50 text-yellow-600";
+
+    return "bg-gray-50 text-gray-600";
+  };
 
   const paginate = (pageNumber) => {
     if (pageNumber >= 1 && pageNumber <= pagination.totalPages) {
@@ -209,9 +214,7 @@ const BattingRecord = () => {
             }}
             className="border border-gray-400 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-600"
           >
-            <option value="all">
-              {isBn ? "সকল প্রোভাইডার" : "All Providers"}
-            </option>
+            <option value="all">{isBn ? "সকল গেম" : "All Games"}</option>
             {providers.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -316,6 +319,7 @@ const BattingRecord = () => {
                   {gameHistory.map((row) => {
                     const pl = getProfitLoss(row);
                     const award = getAward(row);
+                    const betAmount = getBetAmount(row);
 
                     return (
                       <tr key={row._id} className="border-b hover:bg-gray-50">
@@ -325,18 +329,16 @@ const BattingRecord = () => {
 
                         <td className="p-3 text-sm">
                           <span
-                            className={`px-2 py-1 rounded-full text-xs font-bold ${
-                              row.bet_type === "BET"
-                                ? "bg-red-50 text-red-600"
-                                : "bg-green-50 text-green-600"
-                            }`}
+                            className={`px-2 py-1 rounded-full text-xs font-bold ${resultClass(
+                              row,
+                            )}`}
                           >
-                            {row.bet_type}
+                            {getResultLabel(row)}
                           </span>
                         </td>
 
-                        <td className="p-3 text-sm">৳{money(row.amount)}</td>
-                        <td className="p-3 text-sm">৳{money(row.amount)}</td>
+                        <td className="p-3 text-sm">৳{money(betAmount)}</td>
+                        <td className="p-3 text-sm">৳{money(betAmount)}</td>
 
                         <td className="p-3 text-sm text-green-600">
                           ৳{money(award)}
@@ -350,9 +352,12 @@ const BattingRecord = () => {
                           {pl >= 0 ? "+" : "-"}৳{money(Math.abs(pl))}
                         </td>
 
-                        <td className="p-3 text-sm">{row.game_code || "-"}</td>
                         <td className="p-3 text-sm">
-                          {row.transaction_id || "-"}
+                          {row.game_uid || row.game_code || "-"}
+                        </td>
+
+                        <td className="p-3 text-sm">
+                          {row.game_round || row.verification_key || "-"}
                         </td>
                       </tr>
                     );
@@ -365,6 +370,7 @@ const BattingRecord = () => {
               {gameHistory.map((row) => {
                 const pl = getProfitLoss(row);
                 const award = getAward(row);
+                const betAmount = getBetAmount(row);
 
                 return (
                   <div
@@ -383,16 +389,26 @@ const BattingRecord = () => {
 
                       <div>
                         <p className="text-gray-500 text-xs">
-                          {isBn ? "টাইপ" : "Type"}
+                          {isBn ? "রেজাল্ট" : "Result"}
                         </p>
-                        <p className="font-bold">{row.bet_type}</p>
+                        <p
+                          className={`font-bold ${
+                            getResultType(row) === "win"
+                              ? "text-green-600"
+                              : getResultType(row) === "loss"
+                                ? "text-red-600"
+                                : "text-yellow-600"
+                          }`}
+                        >
+                          {getResultLabel(row)}
+                        </p>
                       </div>
 
                       <div>
                         <p className="text-gray-500 text-xs">
                           {isBn ? "বেট পরিমাণ" : "Bet Amount"}
                         </p>
-                        <p className="font-medium">৳{money(row.amount)}</p>
+                        <p className="font-medium">৳{money(betAmount)}</p>
                       </div>
 
                       <div>
@@ -406,9 +422,11 @@ const BattingRecord = () => {
 
                       <div>
                         <p className="text-gray-500 text-xs">
-                          {isBn ? "গেম নাম" : "Game Name"}
+                          {isBn ? "গেম UID" : "Game UID"}
                         </p>
-                        <p className="font-medium">{row.game_code || "-"}</p>
+                        <p className="font-medium">
+                          {row.game_uid || row.game_code || "-"}
+                        </p>
                       </div>
 
                       <div>

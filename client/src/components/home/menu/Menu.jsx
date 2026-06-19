@@ -8,7 +8,10 @@ import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/Context/AuthContext";
 import axios from "axios";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:5002";
+const API =
+  import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5002";
 
 const getImageUrl = (path = "") => {
   if (!path) return "";
@@ -19,25 +22,9 @@ const getImageUrl = (path = "") => {
 const translations = {
   bn: {
     "HOT GAMES": "গরম খেলা",
-    FAVORITES: "পছন্দের গেমস",
-    SLOT: "স্লট গেম",
-    LIVE: "লাইভ সাসির",
-    SPORTS: "স্পোর্টস",
-    "E-SPORTS": "ই-স্পোর্টস",
-    POKER: "পোকার",
-    FISHING: "ফিশিং",
-    LOTTERY: "লটারি",
   },
   en: {
     "HOT GAMES": "Hot Game",
-    FAVORITES: "Favorites",
-    SLOT: "Slot",
-    LIVE: "Live",
-    SPORTS: "Sports",
-    "E-SPORTS": "E-Sports",
-    POKER: "Poker",
-    FISHING: "Fishing",
-    LOTTERY: "Lottery",
   },
 };
 
@@ -150,7 +137,9 @@ const Menu = ({ homeGameMenu }) => {
         setIsLoading(true);
         setIsError(false);
 
-        const { data } = await axios.get(`${API}/api/categories/active`);
+        const { data } = await axios.get(
+          `${API}/api/public-games/categories/active`,
+        );
 
         const sortedCategories = [...(data?.data || [])].sort((a, b) => {
           const orderA = Number(a?.order ?? 0);

@@ -1,62 +1,133 @@
-// models/schemas/gameHistorySchema.js
 import mongoose from "mongoose";
 
-const gameHistory = new mongoose.Schema(
+const { Schema } = mongoose;
+
+const gameHistorySchema = new Schema(
   {
-    username: {
-      type: String,
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "Admin",
       required: true,
+      index: true,
     },
-    provider_code: {
-      type: String,
-      required: true,
-      uppercase: true,
-      trim: true,
-    },
-    game_code: {
+
+    userId: {
       type: String,
       required: true,
       trim: true,
+      index: true,
     },
-    bet_type: {
+
+    userGamePlayName: {
       type: String,
-      enum: ["BET", "SETTLE", "CANCEL", "REFUND"],
       required: true,
+      trim: true,
+      index: true,
     },
-    amount: {
+
+    member_account: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+
+    phone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    currency: {
+      type: String,
+      default: "BDT",
+      trim: true,
+    },
+
+    userRole: {
+      type: String,
+      default: "user",
+      index: true,
+    },
+
+    game_uid: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+
+    game_round: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+      index: true,
+    },
+
+    serial_number: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+      index: true,
+    },
+
+    bet_amount: {
       type: Number,
       required: true,
       min: 0,
     },
-    transaction_id: {
-      type: String,
+
+    win_amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    net_amount: {
+      type: Number,
       required: true,
     },
-    verification_key: {
+
+    resultType: {
       type: String,
-      unique: true, // Verification key must be unique
+      enum: ["win", "loss", "push"],
+      required: true,
+      index: true,
     },
-    times: String, // ISO string বা timestamp
-    status: {
+
+    balance_before: {
+      type: Number,
+      required: true,
+    },
+
+    balance_after: {
+      type: Number,
+      required: true,
+    },
+
+    oracleTimestamp: {
       type: String,
-      enum: ["won", "lost", "cancelled", "refunded", "push"],
-      default: function () {
-        return this.bet_type === "SETTLE" ? "won" : "lost";
-      },
+      default: "",
+      trim: true,
     },
-    round_id: String, // optional
-    bet_details: mongoose.Schema.Types.Mixed, // যদি আরো ডিটেইলস থাকে
+
+    rawPayload: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
   },
-  {
-    timestamps: true, // createdAt, updatedAt অটো যোগ হবে
-  }
+  { timestamps: true },
 );
 
-// ইনডেক্স যোগ করে দ্রুত সার্চ করা যায়
-gameHistory.index({ verification_key: 1 }, { unique: true });
-gameHistory.index({ transaction_id: 1 });
-gameHistory.index({ username: 1, createdAt: -1 });
-gameHistory.index({ provider_code: 1 });
+gameHistorySchema.index({ user: 1, createdAt: -1 });
+gameHistorySchema.index({ user: 1, game_uid: 1, createdAt: -1 });
+gameHistorySchema.index({ resultType: 1, createdAt: -1 });
+gameHistorySchema.index({ userGamePlayName: 1, createdAt: -1 });
 
-const GameHistory = mongoose.model("GameHistory", gameHistory);
+const GameHistory =
+  mongoose.models.GameHistory ||
+  mongoose.model("GameHistory", gameHistorySchema);
+
 export default GameHistory;

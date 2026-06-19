@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   FaToggleOn,
@@ -10,6 +10,7 @@ import {
   FaPlus,
   FaSpinner,
   FaExclamationTriangle,
+  FaSearch,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 import { API_URL } from "../utils/baseURL";
@@ -19,7 +20,10 @@ export default function SuperAffiliate() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // View/Edit Modal
+  const [searchText, setSearchText] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const usersPerPage = 10;
+
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewUser, setViewUser] = useState(null);
   const [passwordForm, setPasswordForm] = useState({
@@ -28,7 +32,6 @@ export default function SuperAffiliate() {
   });
   const [showPassword, setShowPassword] = useState(false);
 
-  // Commission Modal
   const [commissionModalOpen, setCommissionModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [commissionForm, setCommissionForm] = useState({
@@ -38,7 +41,6 @@ export default function SuperAffiliate() {
     gameWinCommission: 0,
   });
 
-  // Create Modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
     username: "",
@@ -74,6 +76,50 @@ export default function SuperAffiliate() {
   useEffect(() => {
     fetchSuperAffiliates();
   }, []);
+
+  const filteredUsers = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+
+    if (!q) return users;
+
+    return users.filter((user) => {
+      const searchableText = [
+        user.username,
+        user.email,
+        user.whatsapp,
+        user.phone,
+        user.phoneNumber,
+        user.mobile,
+        user.userId,
+        user._id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(q);
+    });
+  }, [users, searchText]);
+
+  const totalPages = Math.max(
+    Math.ceil(filteredUsers.length / usersPerPage),
+    1,
+  );
+
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * usersPerPage;
+    return filteredUsers.slice(startIndex, startIndex + usersPerPage);
+  }, [filteredUsers, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const handleToggleClick = (user) => {
     const isActive = user.isActive ?? false;
@@ -212,15 +258,99 @@ export default function SuperAffiliate() {
     }
   };
 
-  // Animation variants
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: (i) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05 } }),
   };
 
-  const modalVariants = {
-    hidden: { scale: 0.85, opacity: 0 },
-    visible: { scale: 1, opacity: 1, transition: { duration: 0.3 } },
+  const Pagination = () => {
+    if (filteredUsers.length === 0) return null;
+
+    const pageNumbers = [];
+
+    for (let i = 1; i <= totalPages; i++) {
+      if (
+        i === 1 ||
+        i === totalPages ||
+        (i >= currentPage - 1 && i <= currentPage + 1)
+      ) {
+        pageNumbers.push(i);
+      }
+    }
+
+    const uniquePages = [...new Set(pageNumbers)];
+
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 mb-10">
+        <p className="text-gray-300 text-sm">
+          Showing{" "}
+          <span className="text-emerald-300 font-semibold">
+            {(currentPage - 1) * usersPerPage + 1}
+          </span>{" "}
+          to{" "}
+          <span className="text-emerald-300 font-semibold">
+            {Math.min(currentPage * usersPerPage, filteredUsers.length)}
+          </span>{" "}
+          of{" "}
+          <span className="text-emerald-300 font-semibold">
+            {filteredUsers.length}
+          </span>{" "}
+          users
+        </p>
+
+        <div className="flex items-center gap-2 flex-wrap justify-center">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            className={`px-4 py-2 rounded-xl font-semibold border transition-all cursor-pointer ${
+              currentPage === 1
+                ? "bg-gray-800/60 text-gray-500 border-gray-700 cursor-not-allowed"
+                : "bg-gray-800/80 hover:bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+            }`}
+          >
+            Prev
+          </button>
+
+          {uniquePages.map((page, index) => {
+            const prevPage = uniquePages[index - 1];
+            const showDots = index > 0 && page - prevPage > 1;
+
+            return (
+              <React.Fragment key={page}>
+                {showDots && <span className="text-gray-400 px-1">...</span>}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-4 py-2 rounded-xl font-semibold border transition-all cursor-pointer ${
+                    currentPage === page
+                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-500 shadow-lg"
+                      : "bg-gray-800/80 hover:bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+                  }`}
+                >
+                  {page}
+                </button>
+              </React.Fragment>
+            );
+          })}
+
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() =>
+              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+            }
+            className={`px-4 py-2 rounded-xl font-semibold border transition-all cursor-pointer ${
+              currentPage === totalPages
+                ? "bg-gray-800/60 text-gray-500 border-gray-700 cursor-not-allowed"
+                : "bg-gray-800/80 hover:bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+            }`}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -252,7 +382,6 @@ export default function SuperAffiliate() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-emerald-950/20 to-black p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-3">
             Super Affiliate Users
@@ -262,7 +391,19 @@ export default function SuperAffiliate() {
           </p>
         </div>
 
-        {/* Create Button */}
+        <div className="mb-6 bg-gray-900/40 backdrop-blur-md border border-emerald-800/40 rounded-2xl p-4 shadow-2xl">
+          <div className="relative">
+            <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-400" />
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search by username, phone, email, whatsapp..."
+              className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl pl-12 pr-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
+            />
+          </div>
+        </div>
+
         <div className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-50">
           <motion.button
             whileHover={{ scale: 1.1 }}
@@ -275,13 +416,12 @@ export default function SuperAffiliate() {
           </motion.button>
         </div>
 
-        {users.length === 0 ? (
+        {filteredUsers.length === 0 ? (
           <div className="text-center py-20 text-gray-400 text-xl">
             No Super Affiliates found
           </div>
         ) : (
           <>
-            {/* Desktop Table */}
             <div className="hidden lg:block overflow-x-auto rounded-2xl border border-emerald-800/40 bg-gray-900/40 backdrop-blur-md shadow-2xl mb-10">
               <table className="w-full min-w-[1200px] text-left">
                 <thead>
@@ -313,7 +453,7 @@ export default function SuperAffiliate() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user, idx) => {
+                  {paginatedUsers.map((user, idx) => {
                     const isActive = user.isActive ?? false;
                     return (
                       <motion.tr
@@ -378,9 +518,8 @@ export default function SuperAffiliate() {
               </table>
             </div>
 
-            {/* Mobile Cards */}
             <div className="lg:hidden space-y-5 mt-6">
-              {users.map((user, idx) => {
+              {paginatedUsers.map((user, idx) => {
                 const isActive = user.isActive ?? false;
                 return (
                   <motion.div
@@ -456,11 +595,12 @@ export default function SuperAffiliate() {
                 );
               })}
             </div>
+
+            <Pagination />
           </>
         )}
       </div>
 
-      {/* Create Modal */}
       {createModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-2 overflow-y-auto">
           <motion.div
@@ -645,7 +785,6 @@ export default function SuperAffiliate() {
         </div>
       )}
 
-      {/* Edit/View Modal */}
       {viewModalOpen && viewUser && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div
@@ -726,7 +865,6 @@ export default function SuperAffiliate() {
         </div>
       )}
 
-      {/* Commission Modal */}
       {commissionModalOpen && selectedUser && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div

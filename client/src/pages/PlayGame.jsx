@@ -2,7 +2,7 @@ import { AuthContext } from "@/Context/AuthContext";
 import Modal from "@/components/home/modal/Modal";
 import Login from "@/components/shared/login/Login";
 import RegistrationModal from "@/components/shared/login/RegistrationModal";
-import Loading from "@/components/Loading/Loading"; // ✅ path ta tomar folder onujayi thik koro
+import Loading from "@/components/Loading/Loading";
 import axios from "axios";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { FaRedoAlt, FaTimes } from "react-icons/fa";
@@ -15,7 +15,7 @@ const PlayGame = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { user, language } = useContext(AuthContext);
+  const { user, language, loading: authLoading } = useContext(AuthContext);
 
   const [gameUrl, setGameUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,6 +34,9 @@ const PlayGame = () => {
     gameIdMissing: isBn ? "গেম আইডি পাওয়া যায়নি" : "Game ID not found",
     failed: isBn ? "গেম চালু হয়নি" : "Failed to launch game",
     noUrl: isBn ? "গেম URL পাওয়া যায়নি" : "No game URL received",
+    tokenMissing: isBn
+      ? "লগইন টোকেন পাওয়া যায়নি, আবার লগইন করুন"
+      : "Login token not found, please login again",
   };
 
   const loggedUser = useMemo(() => {
@@ -47,10 +50,14 @@ const PlayGame = () => {
     }
   }, [user]);
 
-  const userId =
-    loggedUser?._id || loggedUser?.id || localStorage.getItem("userId") || "";
+  const token =
+    localStorage.getItem("token") ||
+    localStorage.getItem("user_token") ||
+    localStorage.getItem("authToken") ||
+    loggedUser?.token ||
+    "";
 
-  const isLoggedIn = Boolean(loggedUser && userId);
+  const isLoggedIn = Boolean(loggedUser);
 
   const launchGame = async () => {
     if (!id) {
@@ -65,19 +72,37 @@ const PlayGame = () => {
       return;
     }
 
+    if (!token) {
+      toast.error(t.tokenMissing);
+      setShowLoginModal(true);
+      return;
+    }
+
     try {
       setLoading(true);
       setGameUrl("");
 
-      const { data } = await axios.post(`${API}/api/playgame`, {
-        gameID: id,
-        userId,
-      });
+      const { data } = await axios.post(
+        `${API}/api/playgame`,
+        {
+          game_uid: id,
+          gameID: id,
+          gameId: id,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
 
       const url =
+        data?.launch_url ||
         data?.gameUrl ||
         data?.url ||
         data?.launchUrl ||
+        data?.data?.launch_url ||
         data?.data?.gameUrl ||
         data?.data?.url ||
         "";
@@ -98,16 +123,16 @@ const PlayGame = () => {
   };
 
   useEffect(() => {
+    if (authLoading) return;
     launchGame();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isLoggedIn, userId]);
+  }, [id, authLoading, isLoggedIn, token]);
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black">
-      {/* ✅ Custom Loading */}
-      <Loading open={loading} text={t.preparing} />
+      <Loading open={loading || authLoading} text={t.preparing} />
 
-      {!loading && gameUrl && (
+      {!loading && !authLoading && gameUrl && (
         <iframe
           src={gameUrl}
           title="Game"
@@ -117,8 +142,7 @@ const PlayGame = () => {
         />
       )}
 
-      {/* ✅ Optional refresh button only when not loading and no game url */}
-      {!loading && !gameUrl && isLoggedIn && (
+      {!loading && !authLoading && !gameUrl && isLoggedIn && (
         <div className="absolute inset-0 flex items-center justify-center bg-black text-white">
           <button
             type="button"

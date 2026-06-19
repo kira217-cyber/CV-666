@@ -8,15 +8,27 @@ import { AuthContext } from "@/Context/AuthContext";
 import axios from "axios";
 
 const API =
-  import.meta.env.VITE_API_URL
-
-const ORACLE_BASE = "https://api.oraclegames.live/api";
-const ORACLE_KEY = import.meta.env.VITE_ORACLE_TOKEN;
+  import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5002";
 
 const getUploadImage = (path = "") => {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const getGameName = (game) => {
+  return (
+    game?.gameName || game?.oracle?.name || game?.name || game?.gameId || "game"
+  );
+};
+
+const getGameImage = (game) => {
+  if (game?.gameImage) return game.gameImage;
+  if (game?.image) return getUploadImage(game.image);
+  if (game?.oracle?.image) return game.oracle.image;
+  return "/placeholder-game.png";
 };
 
 export default function AnimationBanner() {
@@ -73,50 +85,21 @@ export default function AnimationBanner() {
     fetchBannerData();
   }, []);
 
-  const fetchOracleDetails = async (gameDocs = []) => {
-    const ids = gameDocs.map((item) => item.gameId).filter(Boolean);
-
-    if (!ids.length) return gameDocs;
-
-    try {
-      const { data } = await axios.post(
-        `${ORACLE_BASE}/games/by-ids`,
-        { ids },
-        {
-          headers: {
-            "x-api-key": ORACLE_KEY,
-          },
-        },
-      );
-
-      const oracleGames = data?.data || data?.games || [];
-      const map = new Map();
-
-      oracleGames.forEach((item) => {
-        const id = item?._id || item?.id || item?.gameId || item?.gameID;
-        if (id) map.set(String(id), item);
-      });
-
-      return gameDocs.map((doc) => ({
-        ...doc,
-        apiData: map.get(String(doc.gameId)) || null,
-      }));
-    } catch (error) {
-      return gameDocs;
-    }
-  };
-
   useEffect(() => {
     const fetchJackpotGames = async () => {
       try {
-        const { data } = await axios.get(
-          `${API}/api/games?status=active&isJackpot=true`,
-        );
+        const { data } = await axios.get(`${API}/api/public-games`, {
+          params: {
+            status: "active",
+            isJackpot: true,
+          },
+        });
 
-        const docs = data?.data || [];
-        const withOracleData = await fetchOracleDetails(docs);
+        const docs = Array.isArray(data?.data)
+          ? data.data
+          : data?.data?.games || [];
 
-        setGamesData(withOracleData);
+        setGamesData(docs);
       } catch (error) {
         console.error("Failed to load jackpot games:", error.message);
         setGamesData([]);
@@ -212,38 +195,6 @@ export default function AnimationBanner() {
 
   const displayTitle =
     language === "bn" ? bannerData.titleBD : bannerData.titleEN;
-
-  const getGameName = (game) => {
-    return (
-      game?.apiData?.name ||
-      game?.apiData?.gameName ||
-      game?.name ||
-      game?.gameName ||
-      game?.title ||
-      game?.gameId ||
-      "game"
-    );
-  };
-
-  const getGameImage = (game) => {
-    if (game?.image) {
-      return getUploadImage(game.image);
-    }
-
-    const imgPath =
-      game?.apiData?.image ||
-      game?.apiData?.img ||
-      game?.apiData?.thumbnail ||
-      game?.imageUrl ||
-      game?.img ||
-      game?.thumbnail ||
-      "";
-
-    if (!imgPath) return "/placeholder-game.png";
-    if (/^https?:\/\//i.test(imgPath)) return imgPath;
-
-    return `${ORACLE_BASE.replace("/api", "")}/${imgPath}`;
-  };
 
   const handlePlayGame = (game) => {
     if (!user) {
@@ -379,7 +330,7 @@ export default function AnimationBanner() {
                   alt={getGameName(game)}
                   className="w-full h-full object-cover rounded-lg transition-transform duration-500 group-hover:scale-110 group-hover:blur-[2px]"
                   onError={(e) => {
-                    e.target.src = "/placeholder-game.png";
+                    e.currentTarget.src = "/placeholder-game.png";
                   }}
                 />
 

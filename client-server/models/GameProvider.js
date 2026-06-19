@@ -14,6 +14,7 @@ const GameProviderSchema = new mongoose.Schema(
       required: true,
       trim: true,
       uppercase: true,
+      index: true,
     },
 
     providerIcon: {
@@ -29,9 +30,13 @@ const GameProviderSchema = new mongoose.Schema(
       index: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 GameProviderSchema.index({ categoryId: 1, providerId: 1 }, { unique: true });
 
-export default mongoose.model("GameProvider", GameProviderSchema);
+const GameProvider =
+  mongoose.models.GameProvider ||
+  mongoose.model("GameProvider", GameProviderSchema);
+
+export default GameProvider;

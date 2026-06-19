@@ -7,6 +7,7 @@ import {
   FaImage,
   FaPlusCircle,
   FaSave,
+  FaSearch,
   FaServer,
   FaSpinner,
   FaSyncAlt,
@@ -16,9 +17,6 @@ import {
 
 const API =
   import.meta.env.VITE_REACT_APP_BACKEND_API2 || "http://localhost:5002";
-
-const ORACLE_PROVIDER_API = "https://api.oraclegames.live/api/providers";
-const ORACLE_PROVIDER_KEY = import.meta.env.VITE_ORACLE_TOKEN;
 
 const defaultForm = {
   categoryId: "",
@@ -31,6 +29,29 @@ const getImageUrl = (path = "") => {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const cleanProviderId = (value = "") =>
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
+const normalizeOracleProviders = (data) => {
+  const list = Array.isArray(data) ? data : data?.data || data?.providers || [];
+
+  return list
+    .filter((item) => item?.providerId || item?.providerCode || item?.code)
+    .map((item) => ({
+      providerId: cleanProviderId(
+        item.providerId || item.providerCode || item.code,
+      ),
+      providerCode: cleanProviderId(
+        item.providerCode || item.providerId || item.code,
+      ),
+      providerName: item.providerName || item.name || "",
+      image: item.image || item.providerIcon || "",
+      raw: item,
+    }));
 };
 
 const AddProvider = () => {
@@ -46,8 +67,12 @@ const AddProvider = () => {
   const [editingId, setEditingId] = useState(null);
   const [pageLoading, setPageLoading] = useState(false);
   const [listLoading, setListLoading] = useState(false);
+  const [oracleLoading, setOracleLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+
+  const [oracleSearch, setOracleSearch] = useState("");
+  const [showSearchList, setShowSearchList] = useState(false);
 
   const isEditing = useMemo(() => Boolean(editingId), [editingId]);
 
@@ -58,12 +83,29 @@ const AddProvider = () => {
       : "";
   }, [categories, form.categoryId]);
 
-  const selectedProviderName = useMemo(() => {
-    const provider = oracleProviders.find(
+  const selectedProvider = useMemo(() => {
+    return oracleProviders.find(
       (item) => String(item.providerCode) === String(form.providerId),
     );
-    return provider?.providerName || "";
   }, [oracleProviders, form.providerId]);
+
+  const selectedProviderName = selectedProvider?.providerName || "";
+
+  const filteredOracleProviders = useMemo(() => {
+    const keyword = oracleSearch.trim().toLowerCase();
+
+    if (!keyword) return oracleProviders.slice(0, 30);
+
+    return oracleProviders
+      .filter((item) => {
+        return (
+          item.providerName?.toLowerCase().includes(keyword) ||
+          item.providerCode?.toLowerCase().includes(keyword) ||
+          item.providerId?.toLowerCase().includes(keyword)
+        );
+      })
+      .slice(0, 50);
+  }, [oracleProviders, oracleSearch]);
 
   const fetchCategories = async () => {
     const { data } = await axios.get(`${API}/api/categories`);
@@ -71,13 +113,15 @@ const AddProvider = () => {
   };
 
   const fetchOracleProviders = async () => {
-    const { data } = await axios.get(ORACLE_PROVIDER_API, {
-      headers: {
-        "x-api-key": ORACLE_PROVIDER_KEY,
-      },
-    });
+    try {
+      setOracleLoading(true);
 
-    setOracleProviders(data?.data || []);
+      const { data } = await axios.get(`${API}/api/game-providers/oracle/list`);
+
+      setOracleProviders(normalizeOracleProviders(data));
+    } finally {
+      setOracleLoading(false);
+    }
   };
 
   const fetchSavedProviders = async (categoryId = form.categoryId) => {
@@ -88,11 +132,19 @@ const AddProvider = () => {
       }
 
       setListLoading(true);
-      const { data } = await axios.get(
-        `${API}/api/game-providers?categoryId=${categoryId}`,
-      );
 
-      setSavedProviders(data?.data || []);
+      const { data } = await axios.get(`${API}/api/game-providers`, {
+        params: {
+          categoryId,
+          limit: 100,
+        },
+      });
+
+      const list = Array.isArray(data?.data)
+        ? data.data
+        : data?.data?.providers || [];
+
+      setSavedProviders(list);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Provider fetch failed");
     } finally {
@@ -117,17 +169,60 @@ const AddProvider = () => {
 
   useEffect(() => {
     fetchSavedProviders(form.categoryId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.categoryId]);
+
+  useEffect(() => {
+    if (form.providerIcon instanceof File) {
+      const url = URL.createObjectURL(form.providerIcon);
+      setPreview(url);
+      return () => URL.revokeObjectURL(url);
+    }
+
+    if (oldIconUrl) {
+      setPreview(oldIconUrl);
+      return;
+    }
+
+    if (selectedProvider?.image && !isEditing) {
+      setPreview(selectedProvider.image);
+      return;
+    }
+
+    if (!form.providerIcon) {
+      setPreview("");
+    }
+  }, [form.providerIcon, oldIconUrl, selectedProvider, isEditing]);
 
   const resetForm = () => {
     setForm((prev) => ({
       ...defaultForm,
       categoryId: prev.categoryId,
     }));
+
     setEditingId(null);
     setPreview("");
     setOldIconUrl("");
     setRemoveOldIcon(false);
+    setOracleSearch("");
+    setShowSearchList(false);
+  };
+
+  const applyOracleProvider = (provider) => {
+    setForm((prev) => ({
+      ...prev,
+      providerId: provider.providerCode || provider.providerId,
+      providerIcon: null,
+    }));
+
+    setOldIconUrl("");
+    setRemoveOldIcon(false);
+    setOracleSearch(
+      `${provider.providerCode || provider.providerId} - ${
+        provider.providerName || ""
+      }`,
+    );
+    setShowSearchList(false);
   };
 
   const handleIconChange = (e) => {
@@ -151,7 +246,6 @@ const AddProvider = () => {
       providerIcon: file,
     }));
 
-    setPreview(URL.createObjectURL(file));
     setRemoveOldIcon(false);
   };
 
@@ -179,10 +273,14 @@ const AddProvider = () => {
       status: provider?.status || "active",
     });
 
-    const iconUrl = getImageUrl(provider?.providerIcon || "");
+    const iconUrl =
+      provider?.providerIconUrl || getImageUrl(provider?.providerIcon || "");
+
     setOldIconUrl(iconUrl);
     setPreview(iconUrl);
     setRemoveOldIcon(false);
+    setOracleSearch("");
+    setShowSearchList(false);
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -205,7 +303,7 @@ const AddProvider = () => {
 
       const fd = new FormData();
       fd.append("categoryId", form.categoryId);
-      fd.append("providerId", form.providerId);
+      fd.append("providerId", cleanProviderId(form.providerId));
       fd.append("status", form.status);
 
       if (form.providerIcon instanceof File) {
@@ -243,10 +341,52 @@ const AddProvider = () => {
     }
   };
 
+  const handleSyncSelectedOracle = async () => {
+    if (!form.categoryId) {
+      toast.error("Please select category first");
+      return;
+    }
+
+    if (!form.providerId) {
+      toast.error("Please select Oracle provider first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { data } = await axios.post(
+        `${API}/api/game-providers/oracle/sync`,
+        {
+          categoryId: form.categoryId,
+          providers: [
+            {
+              providerId: form.providerId,
+              providerCode: form.providerId,
+              image: selectedProvider?.image || "",
+            },
+          ],
+        },
+      );
+
+      toast.success(data?.message || "Provider synced successfully");
+
+      const currentCategory = form.categoryId;
+      resetForm();
+      setForm((prev) => ({ ...prev, categoryId: currentCategory }));
+      fetchSavedProviders(currentCategory);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Sync failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async (provider) => {
     const ok = window.confirm(
-      `Are you sure you want to delete provider ${provider.providerId}?`,
+      `Are you sure? Provider ${provider.providerId} related all games will also be deleted.`,
     );
+
     if (!ok) return;
 
     try {
@@ -256,7 +396,11 @@ const AddProvider = () => {
         `${API}/api/game-providers/${provider._id}`,
       );
 
-      toast.success(data?.message || "Provider deleted successfully");
+      toast.success(
+        data?.data?.deletedGames !== undefined
+          ? `Provider deleted. Deleted games: ${data.data.deletedGames}`
+          : data?.message || "Provider deleted successfully",
+      );
 
       if (editingId === provider._id) {
         resetForm();
@@ -268,6 +412,16 @@ const AddProvider = () => {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const getProviderName = (providerId) => {
+    return (
+      oracleProviders.find(
+        (item) =>
+          String(item.providerCode) === String(providerId) ||
+          String(item.providerId) === String(providerId),
+      )?.providerName || "Unknown Provider"
+    );
   };
 
   return (
@@ -305,10 +459,14 @@ const AddProvider = () => {
                 <button
                   type="button"
                   onClick={loadPageData}
-                  disabled={pageLoading}
+                  disabled={pageLoading || oracleLoading}
                   className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-800/60 hover:bg-emerald-700/70 border border-emerald-600/50 text-white font-semibold transition-all cursor-pointer disabled:opacity-60"
                 >
-                  <FaSyncAlt className={pageLoading ? "animate-spin" : ""} />
+                  <FaSyncAlt
+                    className={
+                      pageLoading || oracleLoading ? "animate-spin" : ""
+                    }
+                  />
                   Refresh
                 </button>
               </div>
@@ -358,12 +516,21 @@ const AddProvider = () => {
 
                     <select
                       value={form.providerId}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          providerId: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => {
+                        const provider = oracleProviders.find(
+                          (item) => item.providerCode === e.target.value,
+                        );
+
+                        if (provider) {
+                          applyOracleProvider(provider);
+                        } else {
+                          setForm((prev) => ({
+                            ...prev,
+                            providerId: "",
+                          }));
+                          setOracleSearch("");
+                        }
+                      }}
                       className="w-full px-4 py-3 rounded-xl bg-black/50 border border-emerald-800/60 text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 cursor-pointer"
                     >
                       <option className="bg-black" value="">
@@ -373,13 +540,93 @@ const AddProvider = () => {
                       {oracleProviders.map((provider) => (
                         <option
                           className="bg-black"
-                          key={provider._id || provider.providerCode}
+                          key={provider.providerCode}
                           value={provider.providerCode}
                         >
-                          {provider.providerName} ({provider.providerCode})
+                          {provider.providerName || "Unknown"} (
+                          {provider.providerCode})
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="relative">
+                    <label className="block text-sm font-semibold text-emerald-200 mb-2">
+                      Search Oracle Provider
+                    </label>
+
+                    <div className="flex items-center gap-3 rounded-xl bg-black/50 border border-emerald-800/60 px-4 py-3 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/30">
+                      <FaSearch className="text-emerald-300" />
+                      <input
+                        value={oracleSearch}
+                        onFocus={() => setShowSearchList(true)}
+                        onChange={(e) => {
+                          setOracleSearch(e.target.value);
+                          setShowSearchList(true);
+                        }}
+                        placeholder="Type provider name/code and select..."
+                        className="w-full bg-transparent text-white outline-none placeholder:text-emerald-200/50"
+                      />
+                    </div>
+
+                    {showSearchList && (
+                      <div className="absolute left-0 right-0 z-30 mt-2 max-h-80 overflow-y-auto rounded-xl border border-emerald-800/60 bg-black p-2 shadow-2xl">
+                        {filteredOracleProviders.length === 0 ? (
+                          <div className="px-3 py-4 text-center text-sm text-emerald-200/70">
+                            No provider found.
+                          </div>
+                        ) : (
+                          filteredOracleProviders.map((provider) => (
+                            <button
+                              key={provider.providerCode}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => applyOracleProvider(provider)}
+                              className="mb-1 flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-emerald-900/50"
+                            >
+                              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-emerald-800/60 bg-black/60">
+                                {provider.image ? (
+                                  <img
+                                    src={provider.image}
+                                    alt={provider.providerName}
+                                    className="h-full w-full object-contain p-1"
+                                  />
+                                ) : (
+                                  <FaServer className="text-emerald-300" />
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-black text-white">
+                                  {provider.providerName || "Unknown Provider"}
+                                </p>
+                                <p className="text-xs font-bold text-emerald-300">
+                                  {provider.providerCode}
+                                </p>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-emerald-200 mb-2">
+                      Provider ID
+                    </label>
+
+                    <input
+                      value={form.providerId}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          providerId: cleanProviderId(e.target.value),
+                        }))
+                      }
+                      placeholder="e.g. PG"
+                      className="w-full px-4 py-3 rounded-xl bg-black/50 border border-emerald-800/60 text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+                    />
                   </div>
 
                   <div>
@@ -471,6 +718,16 @@ const AddProvider = () => {
                         : isEditing
                           ? "Update Provider"
                           : "Create Provider"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSyncSelectedOracle}
+                      disabled={loading}
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-800/60 hover:bg-emerald-700/70 text-white font-bold border border-emerald-600/50 transition-all cursor-pointer disabled:opacity-60"
+                    >
+                      <FaSyncAlt />
+                      Sync Selected Oracle
                     </button>
 
                     {(isEditing || preview) && (
@@ -577,9 +834,12 @@ const AddProvider = () => {
                     >
                       <div className="flex items-start gap-4">
                         <div className="w-20 h-20 rounded-2xl border border-emerald-700/50 bg-black/50 flex items-center justify-center overflow-hidden shrink-0">
-                          {provider.providerIcon ? (
+                          {provider.providerIconUrl || provider.providerIcon ? (
                             <img
-                              src={getImageUrl(provider.providerIcon)}
+                              src={
+                                provider.providerIconUrl ||
+                                getImageUrl(provider.providerIcon)
+                              }
                               alt={provider.providerId}
                               className="w-full h-full object-contain p-2"
                             />
@@ -590,11 +850,7 @@ const AddProvider = () => {
 
                         <div className="min-w-0 flex-1">
                           <h3 className="text-lg font-black text-white truncate">
-                            {oracleProviders.find(
-                              (item) =>
-                                String(item.providerCode) ===
-                                String(provider.providerId),
-                            )?.providerName || "Unknown Provider"}
+                            {getProviderName(provider.providerId)}
                           </h3>
 
                           <p className="font-mono text-sm text-emerald-200/75 truncate">

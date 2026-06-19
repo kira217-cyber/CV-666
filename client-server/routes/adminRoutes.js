@@ -1,5 +1,6 @@
 import express from "express";
 import Admin from "../models/Admin.js";
+import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 
@@ -70,6 +71,19 @@ const createUniqueUsername = async () => {
   }
 
   return username;
+};
+
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      id: user._id,
+      role: user.role,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_EXPIRE || "7d",
+    }
+  );
 };
 
 // API: /api/affiliate/stats/BAEAFD  (যেখানে BAEAFD হলো referralCode)
@@ -293,7 +307,12 @@ router.post("/main/register", async (req, res) => {
       });
     }
 
-    const phoneExists = await Admin.findOne({ whatsapp });
+    const cleanWhatsapp = String(whatsapp).trim();
+
+    const phoneExists = await Admin.findOne({
+      whatsapp: cleanWhatsapp,
+    });
+
     if (phoneExists) {
       return res.status(400).json({
         message: "WhatsApp number already used",
@@ -332,7 +351,7 @@ router.post("/main/register", async (req, res) => {
 
     const user = new Admin({
       username,
-      whatsapp,
+      whatsapp: cleanWhatsapp,
       password: hashedPassword,
       role: newUserRole,
       referredBy,
@@ -369,7 +388,7 @@ router.post("/main/register", async (req, res) => {
 
             if (superReferrer && superReferrer.role === "super-affiliate") {
               const superBonusAmount = Number(
-                superReferrer.referCommission || 0,
+                superReferrer.referCommission || 0
               );
               const superReferBonus = superBonusAmount - referBonus;
 
@@ -386,14 +405,22 @@ router.post("/main/register", async (req, res) => {
       }
     }
 
+    const token = generateToken(savedUser);
+
     return res.status(201).json({
+      success: true,
       message: "Registration successful",
+      token,
       user: {
         id: savedUser._id,
+        _id: savedUser._id,
         username: savedUser.username,
         whatsapp: savedUser.whatsapp,
         role: savedUser.role,
         isActive: savedUser.isActive,
+        balance: savedUser.balance || 0,
+        currency: savedUser.currency || "BDT",
+        userGamePlayName: savedUser.userGamePlayName || null,
         referralCode: savedUser.referralCode,
         referralLink: `${process.env.VITE_CLIENT_URL}/register?ref=${savedUser.referralCode}`,
       },
@@ -404,11 +431,13 @@ router.post("/main/register", async (req, res) => {
     if (err?.code === 11000) {
       const field = Object.keys(err.keyPattern || {})[0] || "field";
       return res.status(400).json({
+        success: false,
         message: `${field} already exists`,
       });
     }
 
     return res.status(500).json({
+      success: false,
       message: err.message || "Server error",
     });
   }
@@ -425,7 +454,73 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const user = await Admin.findOne({ whatsapp: whatsapp.trim() });
+    const user = await Admin.findOne({
+      whatsapp: whatsapp.trim(),
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid credentials",
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        message: "Account is pending approval",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Invalid credentials",
+      });
+    }
+
+    const token = generateToken(user);
+
+    return res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        _id: user._id,
+        username: user.username,
+        whatsapp: user.whatsapp,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        balance: user.balance || 0,
+        currency: user.currency || "BDT",
+        userGamePlayName: user.userGamePlayName || null,
+        referralCode: user.referralCode,
+        referralLink: `${process.env.VITE_CLIENT_URL}/register?ref=${user.referralCode}`,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Server error",
+    });
+  }
+});
+
+// POST /aff-login
+router.post("/aff-login", async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+
+    if (!username || !password) {
+      return res.status(400).json({
+        message: "Username and password required",
+      });
+    }
+
+    const user = await Admin.findOne({
+      username: String(username).trim(),
+    });
 
     if (!user) {
       return res.status(400).json({
@@ -451,11 +546,17 @@ router.post("/login", async (req, res) => {
       message: "Login successful",
       user: {
         id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
         username: user.username,
         whatsapp: user.whatsapp,
         email: user.email,
         role: user.role,
         isActive: user.isActive,
+
+        balance: user.balance || 0,
+        commissionBalance: user.commissionBalance || 0,
+
         referralCode: user.referralCode,
         referralLink: `${process.env.VITE_CLIENT_URL}/register?ref=${user.referralCode}`,
       },

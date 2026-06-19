@@ -18,13 +18,29 @@ const API =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5002";
 
-const ORACLE_BASE = "https://api.oraclegames.live/api";
-const ORACLE_KEY = import.meta.env.VITE_ORACLE_TOKEN;
-
 const getUploadImage = (path = "") => {
   if (!path) return "/placeholder-game.png";
   if (/^https?:\/\//i.test(path)) return path;
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const getGameName = (game) => {
+  return (
+    game?.gameName ||
+    game?.oracle?.name ||
+    game?.name ||
+    game?.gameName ||
+    game?.title ||
+    game?.gameId ||
+    "Game"
+  );
+};
+
+const getGameImage = (game) => {
+  if (game?.gameImage) return game.gameImage;
+  if (game?.image) return getUploadImage(game.image);
+  if (game?.oracle?.image) return game.oracle.image;
+  return "/placeholder-game.png";
 };
 
 const HotsGame = () => {
@@ -55,49 +71,20 @@ const HotsGame = () => {
 
   const translate = (key) => t?.[language]?.[key] || t.en[key];
 
-  const fetchOracleDetails = async (gameDocs = []) => {
-    const ids = gameDocs.map((item) => item.gameId).filter(Boolean);
-
-    if (!ids.length) return gameDocs;
-
-    try {
-      const { data } = await axios.post(
-        `${ORACLE_BASE}/games/by-ids`,
-        { ids },
-        {
-          headers: {
-            "x-api-key": ORACLE_KEY,
-          },
-        },
-      );
-
-      const oracleGames = data?.data || data?.games || [];
-      const map = new Map();
-
-      oracleGames.forEach((item) => {
-        const id = item?._id || item?.id || item?.gameId || item?.gameID;
-        if (id) map.set(String(id), item);
-      });
-
-      return gameDocs.map((doc) => ({
-        ...doc,
-        apiData: map.get(String(doc.gameId)) || null,
-      }));
-    } catch {
-      return gameDocs;
-    }
-  };
-
   const fetchHotGames = async () => {
     try {
-      const { data } = await axios.get(
-        `${API}/api/games?status=active&isHot=true`,
-      );
+      const { data } = await axios.get(`${API}/api/public-games`, {
+        params: {
+          status: "active",
+          isHot: true,
+        },
+      });
 
-      const docs = data?.data || [];
-      const withOracleData = await fetchOracleDetails(docs);
+      const docs = Array.isArray(data?.data)
+        ? data.data
+        : data?.data?.games || [];
 
-      setGames(withOracleData);
+      setGames(docs);
     } catch {
       setGames([]);
     }
@@ -113,38 +100,6 @@ const HotsGame = () => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  const getGameName = (game) => {
-    return (
-      game?.apiData?.name ||
-      game?.apiData?.gameName ||
-      game?.name ||
-      game?.gameName ||
-      game?.title ||
-      game?.gameId ||
-      "Game"
-    );
-  };
-
-  const getGameImage = (game) => {
-    if (game?.image) {
-      return getUploadImage(game.image);
-    }
-
-    const imgPath =
-      game?.apiData?.image ||
-      game?.apiData?.img ||
-      game?.apiData?.thumbnail ||
-      game?.imageUrl ||
-      game?.img ||
-      game?.thumbnail ||
-      "";
-
-    if (!imgPath) return "/placeholder-game.png";
-    if (/^https?:\/\//i.test(imgPath)) return imgPath;
-
-    return `${ORACLE_BASE.replace("/api", "")}/${imgPath}`;
-  };
 
   const slidePrev = () => swiperRef.current?.slidePrev();
   const slideNext = () => swiperRef.current?.slideNext();
@@ -225,6 +180,7 @@ const HotsGame = () => {
           </Link>
 
           <button
+            type="button"
             onClick={slidePrev}
             className="p-1.5 rounded-lg bg-[#003840]/80 hover:bg-[#00ffaa]/20 border border-[#00ffaa]/30 text-white transition-all cursor-pointer"
           >
@@ -232,6 +188,7 @@ const HotsGame = () => {
           </button>
 
           <button
+            type="button"
             onClick={slideNext}
             className="p-1.5 rounded-lg bg-[#003840]/80 hover:bg-[#00ffaa]/20 border border-[#00ffaa]/30 text-white transition-all cursor-pointer"
           >
@@ -262,7 +219,7 @@ const HotsGame = () => {
         style={{ padding: "0 5px" }}
       >
         {games.map((game, index) => (
-          <SwiperSlide key={game._id || index}>
+          <SwiperSlide key={game._id || game.gameId || index}>
             <div
               className="relative group overflow-hidden rounded-xl shadow-2xl cursor-pointer transition-all duration-500 hover:scale-105 hot-auto-shine"
               style={{
@@ -288,6 +245,7 @@ const HotsGame = () => {
 
               <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700 px-1 uppercase">
                 <button
+                  type="button"
                   onClick={(event) => {
                     event.stopPropagation();
                     handlePlayClick(game);
@@ -310,6 +268,7 @@ const HotsGame = () => {
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t-4 border-[#00ffaa] shadow-2xl transition-transform duration-300">
           <div className="flex flex-col p-4">
             <button
+              type="button"
               onClick={() => setSelectedGame(null)}
               className="absolute top-3 right-3 text-gray-600 hover:text-black cursor-pointer"
             >
@@ -332,6 +291,7 @@ const HotsGame = () => {
             </div>
 
             <button
+              type="button"
               onClick={() => handlePlayClick(selectedGame)}
               className="w-full py-1 md:py-4 bg-gradient-to-r from-[#2563eb] to-[#3b82f6] text-white text-lg font-bold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 cursor-pointer"
             >

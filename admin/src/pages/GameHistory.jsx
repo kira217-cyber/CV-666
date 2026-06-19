@@ -5,8 +5,7 @@ import {
   FaHistory,
   FaDice,
   FaCheckCircle,
-  FaBan,
-  FaUndo,
+  FaEquals,
   FaSyncAlt,
   FaTable,
   FaThLarge,
@@ -14,9 +13,12 @@ import {
   FaChevronRight,
 } from "react-icons/fa";
 
-const API_URL = import.meta.env.VITE_REACT_APP_BACKEND_API2;
+const API_URL =
+  import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5002";
 
-const betTypes = ["ALL", "BET", "SETTLE", "CANCEL", "REFUND"];
+const resultTypes = ["ALL", "win", "loss", "push"];
 
 const money = (value) => {
   const n = Number(value || 0);
@@ -34,31 +36,15 @@ const fmtDate = (value) => {
 };
 
 const badgeClass = (type) => {
-  const t = String(type || "").toUpperCase();
+  const t = String(type || "").toLowerCase();
 
-  if (t === "BET") return "bg-blue-500/15 text-blue-200 border-blue-400/30";
-  if (t === "SETTLE")
+  if (t === "win")
     return "bg-emerald-500/15 text-emerald-200 border-emerald-400/30";
-  if (t === "CANCEL")
-    return "bg-red-500/15 text-red-200 border-red-400/30";
-  if (t === "REFUND")
+  if (t === "loss") return "bg-red-500/15 text-red-200 border-red-400/30";
+  if (t === "push")
     return "bg-yellow-500/15 text-yellow-200 border-yellow-400/30";
 
   return "bg-white/10 text-white border-white/20";
-};
-
-const statusClass = (status) => {
-  const s = String(status || "").toLowerCase();
-
-  if (s === "won")
-    return "bg-emerald-500/15 text-emerald-200 border-emerald-400/30";
-  if (s === "lost") return "bg-red-500/15 text-red-200 border-red-400/30";
-  if (s === "cancelled")
-    return "bg-orange-500/15 text-orange-200 border-orange-400/30";
-  if (s === "refunded")
-    return "bg-yellow-500/15 text-yellow-200 border-yellow-400/30";
-
-  return "bg-slate-500/15 text-slate-200 border-slate-400/30";
 };
 
 const SummaryCard = ({ title, count, amount, icon, active, onClick }) => {
@@ -83,7 +69,7 @@ const SummaryCard = ({ title, count, amount, icon, active, onClick }) => {
       </div>
 
       <p className="mt-4 text-sm text-emerald-100/80">
-        Total Amount:{" "}
+        Net Amount:{" "}
         <span className="font-bold text-emerald-100">{money(amount)}</span>
       </p>
     </button>
@@ -102,7 +88,7 @@ const GameHistory = () => {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [betType, setBetType] = useState("ALL");
+  const [resultType, setResultType] = useState("ALL");
   const [viewMode, setViewMode] = useState("table");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -126,10 +112,10 @@ const GameHistory = () => {
     };
 
     if (debouncedSearch) query.search = debouncedSearch;
-    if (betType !== "ALL") query.bet_type = betType;
+    if (resultType !== "ALL") query.resultType = resultType;
 
     return query;
-  }, [currentPage, debouncedSearch, betType]);
+  }, [currentPage, debouncedSearch, resultType]);
 
   const fetchGameHistory = async () => {
     setLoading(true);
@@ -148,11 +134,11 @@ const GameHistory = () => {
           limit: 50,
           total: 0,
           totalPages: 1,
-        }
+        },
       );
     } catch (err) {
       setError(
-        err?.response?.data?.message || err.message || "Failed to load history"
+        err?.response?.data?.message || err.message || "Failed to load history",
       );
     } finally {
       setLoading(false);
@@ -170,14 +156,13 @@ const GameHistory = () => {
   };
 
   const handleFilter = (type) => {
-    setBetType(type);
+    setResultType(type);
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   return (
     <div className="min-h-screen px-4 md:px-8 pb-10 text-emerald-50">
       <div className="rounded-3xl border border-emerald-800/40 bg-gradient-to-br from-green-950 via-emerald-950 to-black shadow-2xl shadow-emerald-950/50 overflow-hidden">
-        {/* Header */}
         <div className="p-5 md:p-7 border-b border-emerald-800/40 bg-black/25">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
             <div>
@@ -218,49 +203,35 @@ const GameHistory = () => {
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="p-5 md:p-7 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="p-5 md:p-7 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           <SummaryCard
-            title="Total BET"
-            count={summary?.BET?.count}
-            amount={summary?.BET?.amount}
-            icon={<FaDice />}
-            active={betType === "BET"}
-            onClick={() => handleFilter(betType === "BET" ? "ALL" : "BET")}
-          />
-          <SummaryCard
-            title="Total SETTLE"
-            count={summary?.SETTLE?.count}
-            amount={summary?.SETTLE?.amount}
+            title="Total Win"
+            count={summary?.win?.count}
+            amount={summary?.win?.netAmount}
             icon={<FaCheckCircle />}
-            active={betType === "SETTLE"}
-            onClick={() =>
-              handleFilter(betType === "SETTLE" ? "ALL" : "SETTLE")
-            }
+            active={resultType === "win"}
+            onClick={() => handleFilter(resultType === "win" ? "ALL" : "win")}
           />
+
           <SummaryCard
-            title="Total CANCEL"
-            count={summary?.CANCEL?.count}
-            amount={summary?.CANCEL?.amount}
-            icon={<FaBan />}
-            active={betType === "CANCEL"}
-            onClick={() =>
-              handleFilter(betType === "CANCEL" ? "ALL" : "CANCEL")
-            }
+            title="Total Loss"
+            count={summary?.loss?.count}
+            amount={summary?.loss?.netAmount}
+            icon={<FaDice />}
+            active={resultType === "loss"}
+            onClick={() => handleFilter(resultType === "loss" ? "ALL" : "loss")}
           />
+
           <SummaryCard
-            title="Total REFUND"
-            count={summary?.REFUND?.count}
-            amount={summary?.REFUND?.amount}
-            icon={<FaUndo />}
-            active={betType === "REFUND"}
-            onClick={() =>
-              handleFilter(betType === "REFUND" ? "ALL" : "REFUND")
-            }
+            title="Total Push"
+            count={summary?.push?.count}
+            amount={summary?.push?.netAmount}
+            icon={<FaEquals />}
+            active={resultType === "push"}
+            onClick={() => handleFilter(resultType === "push" ? "ALL" : "push")}
           />
         </div>
 
-        {/* Filters */}
         <div className="px-5 md:px-7 pb-5 flex flex-col xl:flex-row gap-4">
           <div className="relative flex-1">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" />
@@ -268,18 +239,18 @@ const GameHistory = () => {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by transaction_id, verification_key, game_code, provider_code, username..."
+              placeholder="Search by user, member account, game uid, game round, serial number..."
               className="w-full rounded-2xl border border-emerald-800/50 bg-black/45 py-3.5 pl-12 pr-4 text-sm text-white placeholder-emerald-200/40 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 transition-all cursor-text"
             />
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {betTypes.map((type) => (
+            {resultTypes.map((type) => (
               <button
                 key={type}
                 onClick={() => handleFilter(type)}
-                className={`rounded-xl px-4 py-3 text-sm font-bold border transition-all cursor-pointer ${
-                  betType === type
+                className={`rounded-xl px-4 py-3 text-sm font-bold border transition-all cursor-pointer uppercase ${
+                  resultType === type
                     ? "bg-gradient-to-r from-emerald-600 to-green-700 text-white border-emerald-300/50 shadow-lg shadow-emerald-900/40"
                     : "bg-black/35 text-emerald-100 border-emerald-800/50 hover:bg-emerald-900/40"
                 }`}
@@ -296,7 +267,6 @@ const GameHistory = () => {
           </div>
         )}
 
-        {/* Desktop Table */}
         {viewMode === "table" && (
           <div className="hidden md:block px-5 md:px-7 pb-5">
             <div className="overflow-x-auto rounded-2xl border border-emerald-800/45 bg-black/30">
@@ -304,13 +274,16 @@ const GameHistory = () => {
                 <thead className="bg-emerald-950/70 text-emerald-100">
                   <tr>
                     <th className="px-4 py-4 text-left">User</th>
-                    <th className="px-4 py-4 text-left">Provider</th>
-                    <th className="px-4 py-4 text-left">Game Code</th>
-                    <th className="px-4 py-4 text-left">Type</th>
-                    <th className="px-4 py-4 text-right">Amount</th>
-                    <th className="px-4 py-4 text-left">Status</th>
-                    <th className="px-4 py-4 text-left">Transaction</th>
-                    <th className="px-4 py-4 text-left">Verification</th>
+                    <th className="px-4 py-4 text-left">Member</th>
+                    <th className="px-4 py-4 text-left">Game UID</th>
+                    <th className="px-4 py-4 text-left">Result</th>
+                    <th className="px-4 py-4 text-right">Bet</th>
+                    <th className="px-4 py-4 text-right">Win</th>
+                    <th className="px-4 py-4 text-right">Net</th>
+                    <th className="px-4 py-4 text-right">Before</th>
+                    <th className="px-4 py-4 text-right">After</th>
+                    <th className="px-4 py-4 text-left">Serial</th>
+                    <th className="px-4 py-4 text-left">Round</th>
                     <th className="px-4 py-4 text-left">Date</th>
                   </tr>
                 </thead>
@@ -318,7 +291,7 @@ const GameHistory = () => {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="9" className="px-4 py-12 text-center">
+                      <td colSpan="12" className="px-4 py-12 text-center">
                         <FaSyncAlt className="mx-auto mb-3 animate-spin text-2xl text-emerald-300" />
                         Loading game history...
                       </td>
@@ -326,7 +299,7 @@ const GameHistory = () => {
                   ) : histories.length === 0 ? (
                     <tr>
                       <td
-                        colSpan="9"
+                        colSpan="12"
                         className="px-4 py-12 text-center text-emerald-200/70"
                       >
                         No game history found.
@@ -339,45 +312,57 @@ const GameHistory = () => {
                         className="border-t border-emerald-900/55 hover:bg-emerald-900/20 transition-colors"
                       >
                         <td className="px-4 py-4 font-semibold text-white">
-                          {item.username || "-"}
+                          {item.userGamePlayName || item.username || "-"}
                         </td>
 
                         <td className="px-4 py-4">
-                          {item.provider_code || "-"}
+                          {item.member_account || "-"}
                         </td>
 
-                        <td className="px-4 py-4">{item.game_code || "-"}</td>
+                        <td className="px-4 py-4">{item.game_uid || "-"}</td>
 
                         <td className="px-4 py-4">
                           <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${badgeClass(
-                              item.bet_type
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold capitalize ${badgeClass(
+                              item.resultType,
                             )}`}
                           >
-                            {item.bet_type || "-"}
+                            {item.resultType || "-"}
                           </span>
                         </td>
 
                         <td className="px-4 py-4 text-right font-bold text-emerald-100">
-                          {money(item.amount)}
+                          {money(item.bet_amount)}
                         </td>
 
-                        <td className="px-4 py-4">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold capitalize ${statusClass(
-                              item.status
-                            )}`}
-                          >
-                            {item.status || "-"}
-                          </span>
+                        <td className="px-4 py-4 text-right font-bold text-emerald-100">
+                          {money(item.win_amount)}
+                        </td>
+
+                        <td
+                          className={`px-4 py-4 text-right font-bold ${
+                            Number(item.net_amount || 0) >= 0
+                              ? "text-emerald-200"
+                              : "text-red-200"
+                          }`}
+                        >
+                          {money(item.net_amount)}
+                        </td>
+
+                        <td className="px-4 py-4 text-right">
+                          {money(item.balance_before)}
+                        </td>
+
+                        <td className="px-4 py-4 text-right">
+                          {money(item.balance_after)}
                         </td>
 
                         <td className="px-4 py-4 max-w-[180px] truncate">
-                          {item.transaction_id || "-"}
+                          {item.serial_number || "-"}
                         </td>
 
                         <td className="px-4 py-4 max-w-[180px] truncate">
-                          {item.verification_key || "-"}
+                          {item.game_round || "-"}
                         </td>
 
                         <td className="px-4 py-4 whitespace-nowrap text-emerald-100/80">
@@ -392,7 +377,6 @@ const GameHistory = () => {
           </div>
         )}
 
-        {/* Mobile / Card View */}
         {(viewMode === "card" || true) && (
           <div
             className={`px-5 md:px-7 pb-5 ${
@@ -418,7 +402,7 @@ const GameHistory = () => {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-black text-white">
-                          {item.username || "-"}
+                          {item.userGamePlayName || item.username || "-"}
                         </h3>
                         <p className="text-sm text-emerald-200/70">
                           {fmtDate(item.createdAt)}
@@ -426,58 +410,74 @@ const GameHistory = () => {
                       </div>
 
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs font-bold ${badgeClass(
-                          item.bet_type
+                        className={`rounded-full border px-3 py-1 text-xs font-bold capitalize ${badgeClass(
+                          item.resultType,
                         )}`}
                       >
-                        {item.bet_type || "-"}
+                        {item.resultType || "-"}
                       </span>
                     </div>
 
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-xl bg-emerald-950/35 p-3">
-                        <p className="text-emerald-200/60">Amount</p>
+                        <p className="text-emerald-200/60">Bet Amount</p>
                         <p className="font-black text-white">
-                          {money(item.amount)}
+                          {money(item.bet_amount)}
                         </p>
                       </div>
 
                       <div className="rounded-xl bg-emerald-950/35 p-3">
-                        <p className="text-emerald-200/60">Status</p>
-                        <span
-                          className={`mt-1 inline-flex rounded-full border px-3 py-1 text-xs font-bold capitalize ${statusClass(
-                            item.status
-                          )}`}
+                        <p className="text-emerald-200/60">Win Amount</p>
+                        <p className="font-black text-white">
+                          {money(item.win_amount)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-emerald-950/35 p-3">
+                        <p className="text-emerald-200/60">Net Amount</p>
+                        <p
+                          className={`font-black ${
+                            Number(item.net_amount || 0) >= 0
+                              ? "text-emerald-200"
+                              : "text-red-200"
+                          }`}
                         >
-                          {item.status || "-"}
-                        </span>
-                      </div>
-
-                      <div className="rounded-xl bg-emerald-950/35 p-3">
-                        <p className="text-emerald-200/60">Provider</p>
-                        <p className="font-semibold text-white break-all">
-                          {item.provider_code || "-"}
+                          {money(item.net_amount)}
                         </p>
                       </div>
 
                       <div className="rounded-xl bg-emerald-950/35 p-3">
-                        <p className="text-emerald-200/60">Game Code</p>
+                        <p className="text-emerald-200/60">Game UID</p>
                         <p className="font-semibold text-white break-all">
-                          {item.game_code || "-"}
+                          {item.game_uid || "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-emerald-950/35 p-3">
+                        <p className="text-emerald-200/60">Balance Before</p>
+                        <p className="font-semibold text-white break-all">
+                          {money(item.balance_before)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-emerald-950/35 p-3">
+                        <p className="text-emerald-200/60">Balance After</p>
+                        <p className="font-semibold text-white break-all">
+                          {money(item.balance_after)}
                         </p>
                       </div>
 
                       <div className="col-span-2 rounded-xl bg-emerald-950/35 p-3">
-                        <p className="text-emerald-200/60">Transaction ID</p>
+                        <p className="text-emerald-200/60">Serial Number</p>
                         <p className="font-semibold text-white break-all">
-                          {item.transaction_id || "-"}
+                          {item.serial_number || "-"}
                         </p>
                       </div>
 
                       <div className="col-span-2 rounded-xl bg-emerald-950/35 p-3">
-                        <p className="text-emerald-200/60">Verification Key</p>
+                        <p className="text-emerald-200/60">Game Round</p>
                         <p className="font-semibold text-white break-all">
-                          {item.verification_key || "-"}
+                          {item.game_round || "-"}
                         </p>
                       </div>
                     </div>
@@ -488,7 +488,6 @@ const GameHistory = () => {
           </div>
         )}
 
-        {/* Pagination */}
         <div className="px-5 md:px-7 py-5 border-t border-emerald-800/40 bg-black/20">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <p className="text-sm text-emerald-200/75">

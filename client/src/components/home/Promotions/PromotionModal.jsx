@@ -48,7 +48,7 @@ const PromotionModal = () => {
       if (latest.length > 0) {
         setPromotions(latest);
         setShowModal(true);
-        localStorage.setItem("promotionModalSeen", "true");
+        // localStorage.setItem("promotionModalSeen", "true");
       }
     } catch (err) {
       console.error("Failed to load promotions:", err);

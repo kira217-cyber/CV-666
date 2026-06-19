@@ -125,7 +125,7 @@ const CustomSidebar = () => {
           icon: <FaUserTimes />,
           to: "/master-affiliate",
         },
-        { label: "All Users", icon: <FaUserTimes />, to: "/all-users" },
+        // { label: "All Users", icon: <FaUserTimes />, to: "/all-users" },
       ],
     },
     {

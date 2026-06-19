@@ -13,18 +13,22 @@ import Login from "@/components/shared/login/Login";
 import RegistrationModal from "@/components/shared/login/RegistrationModal";
 import { AuthContext } from "@/Context/AuthContext";
 
-const API =
-  import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:5002";
-
-const ORACLE_BASE = "https://api.oraclegames.live/api";
-const ORACLE_KEY = import.meta.env.VITE_ORACLE_TOKEN;
+const API = import.meta.env.VITE_API_URL;
 
 const getUploadImage = (path = "") => {
   if (!path) return "/placeholder-game.png";
   if (/^https?:\/\//i.test(path)) return path;
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const getGameName = (game) =>
+  game?.gameName || game?.oracle?.name || game?.name || game?.gameId || "Game";
+
+const getGameImage = (game) => {
+  if (game?.gameImage) return game.gameImage;
+  if (game?.image) return getUploadImage(game.image);
+  if (game?.oracle?.image) return game.oracle.image;
+  return "/placeholder-game.png";
 };
 
 const GameSection = ({ category, games, onPlay }) => {
@@ -35,33 +39,6 @@ const GameSection = ({ category, games, onPlay }) => {
     language === "bn"
       ? category?.categoryName?.bn || category?.categoryName?.en
       : category?.categoryName?.en || category?.categoryName?.bn;
-
-  const getGameName = (game) =>
-    game?.apiData?.name ||
-    game?.apiData?.gameName ||
-    game?.name ||
-    game?.gameName ||
-    game?.title ||
-    game?.gameId ||
-    "Game";
-
-  const getGameImage = (game) => {
-    if (game?.image) return getUploadImage(game.image);
-
-    const imgPath =
-      game?.apiData?.image ||
-      game?.apiData?.img ||
-      game?.apiData?.thumbnail ||
-      game?.imageUrl ||
-      game?.img ||
-      game?.thumbnail ||
-      "";
-
-    if (!imgPath) return "/placeholder-game.png";
-    if (/^https?:\/\//i.test(imgPath)) return imgPath;
-
-    return `${ORACLE_BASE.replace("/api", "")}/${imgPath}`;
-  };
 
   if (!games?.length) return null;
 
@@ -81,6 +58,7 @@ const GameSection = ({ category, games, onPlay }) => {
           </Link>
 
           <button
+            type="button"
             onClick={() => swiperRef.current?.slidePrev()}
             className="p-1.5 rounded-lg bg-[#003840]/80 hover:bg-[#00ffaa]/20 border border-[#00ffaa]/30 text-white transition-all cursor-pointer"
           >
@@ -88,6 +66,7 @@ const GameSection = ({ category, games, onPlay }) => {
           </button>
 
           <button
+            type="button"
             onClick={() => swiperRef.current?.slideNext()}
             className="p-1.5 rounded-lg bg-[#003840]/80 hover:bg-[#00ffaa]/20 border border-[#00ffaa]/30 text-white transition-all cursor-pointer"
           >
@@ -115,7 +94,7 @@ const GameSection = ({ category, games, onPlay }) => {
         style={{ padding: "0 5px" }}
       >
         {games.map((game, index) => (
-          <SwiperSlide key={game._id || index}>
+          <SwiperSlide key={game._id || game.gameId || index}>
             <div
               className="relative group overflow-hidden rounded-xl shadow-2xl cursor-pointer transition-all duration-500 hover:scale-105 category-auto-shine"
               style={{
@@ -132,17 +111,21 @@ const GameSection = ({ category, games, onPlay }) => {
                 src={getGameImage(game)}
                 alt={getGameName(game)}
                 className="w-full h-full object-cover rounded-xl border-2 border-white"
+                onError={(e) => {
+                  e.currentTarget.src = "/placeholder-game.png";
+                }}
               />
 
               <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700 px-1 uppercase">
                 <button
+                  type="button"
                   onClick={(event) => {
                     event.stopPropagation();
                     onPlay(game);
                   }}
                   className="py-0.5 px-1 text-[16px] font-bold text-[#b64100] bg-[#ffd900] rounded-md mb-1 transform scale-50 group-hover:scale-100 group-hover:py-1 group-hover:px-2 group-hover:text-[16px] transition-all duration-700 ease-in-out cursor-pointer"
                 >
-                  {language === "bn" ? "খেলুন" : "PLAY"}
+                  {language === "bn" ? "এখন খেলুন" : "PLAY NOW"}
                 </button>
 
                 <p className="text-white text-[10px] font-semibold text-center line-clamp-2">
@@ -167,37 +150,11 @@ const CategoryGames = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
 
-  const fetchOracleDetails = async (gameDocs = []) => {
-    const ids = gameDocs.map((item) => item.gameId).filter(Boolean);
-    if (!ids.length) return gameDocs;
-
-    try {
-      const { data } = await axios.post(
-        `${ORACLE_BASE}/games/by-ids`,
-        { ids },
-        { headers: { "x-api-key": ORACLE_KEY } },
-      );
-
-      const oracleGames = data?.data || data?.games || [];
-      const map = new Map();
-
-      oracleGames.forEach((item) => {
-        const id = item?._id || item?.id || item?.gameId || item?.gameID;
-        if (id) map.set(String(id), item);
-      });
-
-      return gameDocs.map((doc) => ({
-        ...doc,
-        apiData: map.get(String(doc.gameId)) || null,
-      }));
-    } catch {
-      return gameDocs;
-    }
-  };
-
   const fetchCategoryGames = async () => {
     try {
-      const { data } = await axios.get(`${API}/api/categories/active`);
+      const { data } = await axios.get(
+        `${API}/api/public-games/categories/active`,
+      );
 
       const activeCategories = [...(data?.data || [])].sort((a, b) => {
         const orderA = Number(a?.order ?? 0);
@@ -211,7 +168,7 @@ const CategoryGames = () => {
       const result = await Promise.all(
         activeCategories.map(async (category) => {
           try {
-            const gameRes = await axios.get(`${API}/api/games`, {
+            const gameRes = await axios.get(`${API}/api/public-games`, {
               params: {
                 status: "active",
                 categoryId: category._id,
@@ -223,11 +180,9 @@ const CategoryGames = () => {
               return new Date(a?.createdAt || 0) - new Date(b?.createdAt || 0);
             });
 
-            const withOracle = await fetchOracleDetails(games);
-
             return {
               category,
-              games: withOracle,
+              games,
             };
           } catch {
             return {
@@ -253,33 +208,6 @@ const CategoryGames = () => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  const getGameName = (game) =>
-    game?.apiData?.name ||
-    game?.apiData?.gameName ||
-    game?.name ||
-    game?.gameName ||
-    game?.title ||
-    game?.gameId ||
-    "Game";
-
-  const getGameImage = (game) => {
-    if (game?.image) return getUploadImage(game.image);
-
-    const imgPath =
-      game?.apiData?.image ||
-      game?.apiData?.img ||
-      game?.apiData?.thumbnail ||
-      game?.imageUrl ||
-      game?.img ||
-      game?.thumbnail ||
-      "";
-
-    if (!imgPath) return "/placeholder-game.png";
-    if (/^https?:\/\//i.test(imgPath)) return imgPath;
-
-    return `${ORACLE_BASE.replace("/api", "")}/${imgPath}`;
-  };
 
   const handlePlayClick = (game) => {
     if (!game) return;
@@ -355,6 +283,7 @@ const CategoryGames = () => {
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t-4 border-[#00ffaa] shadow-2xl transition-transform duration-300">
           <div className="flex flex-col p-4">
             <button
+              type="button"
               onClick={() => setSelectedGame(null)}
               className="absolute top-3 right-3 text-gray-600 hover:text-black cursor-pointer"
             >
@@ -366,6 +295,9 @@ const CategoryGames = () => {
                 src={getGameImage(selectedGame)}
                 className="w-24 h-24 object-cover rounded-xl shadow-lg border-2 border-[#00ffaa] -mt-12"
                 alt={getGameName(selectedGame)}
+                onError={(e) => {
+                  e.currentTarget.src = "/placeholder-game.png";
+                }}
               />
 
               <h3 className="text-lg font-bold text-gray-800 truncate">
@@ -374,6 +306,7 @@ const CategoryGames = () => {
             </div>
 
             <button
+              type="button"
               onClick={() => handlePlayClick(selectedGame)}
               className="w-full py-4 bg-gradient-to-r from-[#2563eb] to-[#3b82f6] text-white text-lg font-bold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 cursor-pointer"
             >

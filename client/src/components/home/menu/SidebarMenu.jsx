@@ -14,7 +14,10 @@ import { FaUserFriends, FaTrophy, FaUsers } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import styled from "styled-components";
 
-const API = import.meta.env.VITE_API_URL;
+const API =
+  import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5002";
 
 const getImageUrl = (path = "") => {
   if (!path) return "";
@@ -159,7 +162,9 @@ const SidebarMenu = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const { data } = await axios.get(`${API}/api/categories/active`);
+        const { data } = await axios.get(
+          `${API}/api/public-games/categories/active`,
+        );
 
         const sortedCategories = [...(data?.data || [])].sort((a, b) => {
           const orderA = Number(a?.order ?? 0);
@@ -216,16 +221,6 @@ const SidebarMenu = () => {
       ডাউনলোড: "ডাউনলোড",
       চ্যাট: "চ্যাট",
       "HOT GAMES": "গরম খেলা",
-      SLOTS: "স্লট",
-      POKER: "পোকার",
-      LIVE: "লাইভ কেসিন",
-      SPORTS: "স্পোর্টস",
-      "E-SPORTS": "ই-স্পোর্টস",
-      FISHING: "ফিশিং",
-      LOTTERY: "লটারি",
-      FAVORITES: "পছন্দের",
-      FAVORITE: "পছন্দের",
-      FAVOURITE: "পছন্দের",
       LANGUAGE_BN: "বাংলা",
       LANGUAGE_EN: "English",
     },
@@ -238,16 +233,6 @@ const SidebarMenu = () => {
       ডাউনলোড: "Download",
       চ্যাট: "Chat",
       "HOT GAMES": "Hot Games",
-      SLOTS: "Slots",
-      POKER: "Poker",
-      LIVE: "Live Casino",
-      SPORTS: "Sports",
-      "E-SPORTS": "E-Sports",
-      FISHING: "Fishing",
-      LOTTERY: "Lottery",
-      FAVORITES: "Favorites",
-      FAVORITE: "Favorites",
-      FAVOURITE: "Favorites",
       LANGUAGE_BN: "Bangla",
       LANGUAGE_EN: "English",
     },

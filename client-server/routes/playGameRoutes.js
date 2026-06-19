@@ -1,70 +1,124 @@
 import express from "express";
 import axios from "axios";
-import qs from "qs";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 import Admin from "../models/Admin.js";
-import Game from "../models/Game.js";
 
 const router = express.Router();
 
-const ORACLE_BY_IDS_API = "https://api.oraclegames.live/api/games/by-ids";
+const ORACLE_GAME_LAUNCH_URL =
+  process.env.ORACLE_GAME_LAUNCH_URL ||
+  "https://oraclegames.net/api/getgameurl";
 
-const isObjectIdLike = (val) => /^[0-9a-fA-F]{24}$/.test(String(val || ""));
+const ORACLE_LAUNCH_KEY = "4895677890656568745";
 
-const fetchOracleGameDetailsByIds = async ({ oracleGameId, apiKey }) => {
-  const res = await axios.post(
-    ORACLE_BY_IDS_API,
-    { ids: [String(oracleGameId)] },
-    {
-      headers: {
-        "x-api-key": apiKey,
-        Accept: "application/json",
-      },
-      timeout: 30000,
-    },
-  );
-
-  const data = res?.data?.data?.[0] || res?.data?.games?.[0] || {};
-
-  return {
-    game_code: String(data?.game_code ?? data?.gameCode ?? "").trim(),
-    provider_code: String(
-      data?.provider?.provider_code ||
-        data?.provider?.providerCode ||
-        data?.provider_code ||
-        data?.providerCode ||
-        "",
-    )
-      .trim()
-      .toUpperCase(),
-    game_type: String(
-      data?.game_type || data?.provider?.gameType || data?.gameType || "",
-    )
-      .trim()
-      .toUpperCase(),
-  };
-};
-
-router.post("/playgame", async (req, res) => {
+const requireAuth = (req, res, next) => {
   try {
-    const { gameID, userId } = req.body || {};
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
 
-    if (!gameID) {
-      return res.status(400).json({
-        success: false,
-        message: "gameID is required",
-      });
-    }
-
-    if (!userId) {
+    if (!token) {
       return res.status(401).json({
         success: false,
-        message: "userId is required",
+        message: "No token provided",
       });
     }
 
-    const user = await Admin.findById(userId).select(
-      "username balance isActive role",
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const id =
+      decoded?.id ||
+      decoded?._id ||
+      decoded?.userId ||
+      decoded?.user?._id ||
+      decoded?.user?.id;
+
+    if (!id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token payload",
+      });
+    }
+
+    req.user = { id };
+    next();
+  } catch {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired token",
+    });
+  }
+};
+
+const makeGamePlayName = () => {
+  const letters = "abcdefghijklmnopqrstuvwxyz";
+  const bytes = crypto.randomBytes(10);
+
+  let name = "";
+
+  for (let i = 0; i < 10; i += 1) {
+    name += letters[bytes[i] % letters.length];
+  }
+
+  return name;
+};
+
+const isValidGamePlayName = (value = "") => {
+  return /^[a-z]{10}$/.test(String(value || "").trim());
+};
+
+const getOrCreateGamePlayName = async (user) => {
+  if (isValidGamePlayName(user.userGamePlayName)) {
+    return String(user.userGamePlayName).trim().toLowerCase();
+  }
+
+  for (let i = 0; i < 50; i += 1) {
+    const name = makeGamePlayName();
+
+    const exists = await Admin.exists({
+      userGamePlayName: name,
+    });
+
+    if (!exists) {
+      user.userGamePlayName = name;
+      await user.save();
+      return name;
+    }
+  }
+
+  throw new Error("Failed to generate unique game play username");
+};
+
+const extractLaunchUrl = (responseData) => {
+  return (
+    responseData?.launch_url ||
+    responseData?.launchUrl ||
+    responseData?.gameUrl ||
+    responseData?.url ||
+    responseData?.data?.launch_url ||
+    responseData?.data?.launchUrl ||
+    responseData?.data?.gameUrl ||
+    responseData?.data?.url ||
+    ""
+  );
+};
+
+router.post("/playgame", requireAuth, async (req, res) => {
+  try {
+    const { gameID, game_uid, gameId } = req.body || {};
+
+    const gameUId = String(game_uid || gameID || gameId || "").trim();
+
+    if (!gameUId) {
+      return res.status(400).json({
+        success: false,
+        message: "game_uid is required",
+      });
+    }
+
+    const user = await Admin.findById(req.user?.id).select(
+      "username userId whatsapp phone balance isActive currency userGamePlayName role",
     );
 
     if (!user) {
@@ -88,127 +142,53 @@ router.post("/playgame", async (req, res) => {
       });
     }
 
-    const ORACLE_API_KEY = process.env.DSTGAME_TOKEN;
-
-    if (!ORACLE_API_KEY) {
+    if (!ORACLE_LAUNCH_KEY) {
       return res.status(500).json({
         success: false,
-        message: "DSTGAME_TOKEN missing in .env",
+        message: "ORACLE_LAUNCH_KEY missing in .env",
       });
     }
 
-    let gameDoc = null;
+    let balance = Number(user.balance ?? 0);
 
-    if (isObjectIdLike(gameID)) {
-      gameDoc = await Game.findById(gameID);
+    if (!Number.isFinite(balance) || balance < 0) {
+      balance = 0;
     }
 
-    if (!gameDoc) {
-      gameDoc = await Game.findOne({ gameId: String(gameID).trim() });
-    }
-
-    if (!gameDoc) {
-      return res.status(404).json({
-        success: false,
-        message: "Game not found in DB",
-      });
-    }
-
-    if (gameDoc.status !== "active") {
-      return res.status(403).json({
-        success: false,
-        message: "This game is inactive",
-      });
-    }
-
-    const oracleGameId = String(gameDoc.gameId || "").trim();
-
-    const oracleGameDetails = await fetchOracleGameDetailsByIds({
-      oracleGameId,
-      apiKey: ORACLE_API_KEY,
-    });
+    const userGamePlayName = await getOrCreateGamePlayName(user);
 
     const payload = {
-      username: String(user.username || "").trim(),
-      money: Math.max(0, Math.floor(Number(user.balance) || 0)),
-      currency: "BDT",
-      game_code: oracleGameDetails.game_code,
-      provider_code: oracleGameDetails.provider_code,
-      game_type: oracleGameDetails.game_type,
+      amount: String(Math.max(0, Math.floor(balance))),
+      username: userGamePlayName,
+      game_uid: gameUId,
     };
 
-    console.log("Launching game payload:", payload);
-
-    /**
-     * =========================
-     * ✅ LIVE MODE
-     * =========================
-     */
-
-    // live
-    // const LAUNCH_URL = "https://crazybet99.com/getgameurl/v2";
-
-    // const response = await axios.post(LAUNCH_URL, qs.stringify(payload), {
-    //   headers: {
-    //     "Content-Type": "application/x-www-form-urlencoded",
-    //     "x-dstgame-key": process.env.DSTGAME_KEY || ORACLE_API_KEY,
-    //   },
-    //   timeout: 30000,
-    // });
-
-    // const responseData = response.data;
-
-    /**
-     * =========================
-     * ✅ TEST MODE
-     * =========================
-     */
-
-    const LAUNCH_URL =
-      process.env.TEST_GAME_LAUNCH_URL ||
-      "https://api.oraclegames.live/api/admin/games/launch";
-
-    const response = await axios.post(LAUNCH_URL, payload, {
+    const response = await axios.post(ORACLE_GAME_LAUNCH_URL, payload, {
       headers: {
-        "x-dstgame-key": process.env.DSTGAME_KEY || ORACLE_API_KEY,
         "Content-Type": "application/json",
+        "x-oracle-key": ORACLE_LAUNCH_KEY,
       },
       timeout: 30000,
     });
 
-    const responseData = response.data;
+    const gameUrl = extractLaunchUrl(response.data);
 
-    const gameUrl =
-      typeof responseData === "string"
-        ? responseData
-        : responseData?.url ||
-          responseData?.data?.url ||
-          responseData?.gameUrl ||
-          responseData?.game_url ||
-          responseData?.launchUrl ||
-          responseData?.data?.launchUrl ||
-          "";
-
-    if (!gameUrl) {
+    if (!gameUrl || typeof gameUrl !== "string") {
       return res.status(502).json({
         success: false,
-        message: "No game URL received from launch API",
-        error: responseData,
+        message: "No launch_url received from Oracle API",
+        error: response.data,
       });
     }
 
     return res.json({
       success: true,
       gameUrl,
+      launch_url: gameUrl,
       used: {
-        game_db_id: String(gameDoc._id),
-        oracle_game_id: oracleGameId,
-        username: payload.username,
-        money: payload.money,
-        currency: payload.currency,
-        game_code: payload.game_code,
-        provider_code: payload.provider_code,
-        game_type: payload.game_type,
+        game_uid: gameUId,
+        username: userGamePlayName,
+        amount: payload.amount,
       },
     });
   } catch (error) {
@@ -216,7 +196,10 @@ router.post("/playgame", async (req, res) => {
 
     return res.status(error.response?.status || 500).json({
       success: false,
-      message: "Failed to launch game",
+      message:
+        error?.response?.data?.message ||
+        error.message ||
+        "Failed to launch game",
       error: error.response?.data || error.message,
     });
   }

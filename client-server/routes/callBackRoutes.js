@@ -1,5 +1,5 @@
-// routes/callback.js
 import express from "express";
+
 import Admin from "../models/Admin.js";
 import GameHistory from "../models/GameHistory.js";
 import DepositTurnover from "../models/DepositTurnover.js";
@@ -7,16 +7,37 @@ import OraclePayDepositTurnover from "../models/OraclePayDepositTurnover.js";
 
 const router = express.Router();
 
-const num = (value) => {
-  const n = Number(value);
+const toNum = (value = 0) => {
+  const n = Number.parseFloat(value);
   return Number.isFinite(n) ? n : 0;
 };
 
-const applyTurnoverProgress = async ({ userId, username, amount }) => {
-  const betAmountForTurnover = Math.abs(num(amount));
-  if (!userId || betAmountForTurnover <= 0) return;
+const money = (value = 0) => {
+  const n = toNum(value);
+  return Math.trunc(n * 100) / 100;
+};
 
-  let remainingBetAmount = betAmountForTurnover;
+const clean = (value = "") => String(value || "").trim();
+
+const cleanMemberAccount = (value = "") => {
+  let username = clean(value).toLowerCase();
+
+  if (username.endsWith("orclegames")) {
+    username = username.slice(0, -"orclegames".length);
+  }
+
+  if (username.endsWith("oraclegames")) {
+    username = username.slice(0, -"oraclegames".length);
+  }
+
+  return username;
+};
+
+const applyTurnoverProgress = async ({ userId, username, wagerAmount }) => {
+  const amt = money(wagerAmount);
+  if (!userId || amt <= 0) return;
+
+  let remainingBetAmount = amt;
 
   const manualTurnovers = await DepositTurnover.find({
     user: userId,
@@ -53,15 +74,15 @@ const applyTurnoverProgress = async ({ userId, username, amount }) => {
     const turnover = item.doc;
     const Model = item.model;
 
-    const currentCompleted = num(turnover.completedTurnover);
-    const requiredTurnover = num(turnover.requiredTurnover);
-    const currentRemaining = Math.max(0, num(turnover.remainingTurnover));
+    const currentCompleted = money(turnover.completedTurnover);
+    const requiredTurnover = money(turnover.requiredTurnover);
+    const currentRemaining = Math.max(0, money(turnover.remainingTurnover));
 
     if (currentRemaining <= 0 || requiredTurnover <= 0) continue;
 
-    const addAmount = Math.min(currentRemaining, remainingBetAmount);
-    const newCompleted = currentCompleted + addAmount;
-    const newRemaining = Math.max(0, requiredTurnover - newCompleted);
+    const addAmount = money(Math.min(currentRemaining, remainingBetAmount));
+    const newCompleted = money(currentCompleted + addAmount);
+    const newRemaining = Math.max(0, money(requiredTurnover - newCompleted));
 
     let newStatus = turnover.status;
     let completedAt = turnover.completedAt;
@@ -80,7 +101,7 @@ const applyTurnoverProgress = async ({ userId, username, amount }) => {
       },
     });
 
-    remainingBetAmount -= addAmount;
+    remainingBetAmount = money(remainingBetAmount - addAmount);
 
     console.log(
       `Turnover updated → Type: ${item.source} | User: ${username} | Added: ৳${addAmount} | Completed: ${newCompleted}/${requiredTurnover} | Remaining: ${newRemaining}`,
@@ -88,178 +109,220 @@ const applyTurnoverProgress = async ({ userId, username, amount }) => {
   }
 };
 
+const applyAffiliateCommission = async ({ player, resultType, baseAmount }) => {
+  const amount = money(baseAmount);
+
+  if (!player?.referredBy || amount <= 0) return;
+
+  const master = await Admin.findById(player.referredBy);
+
+  if (!master) return;
+
+  if (resultType === "loss") {
+    const masterRate = toNum(master.gameLossCommission);
+
+    if (masterRate > 0) {
+      const masterCommission = money(amount * (masterRate / 100));
+
+      if (masterCommission > 0) {
+        await Admin.findByIdAndUpdate(master._id, {
+          $inc: {
+            gameLossCommissionBalance: masterCommission,
+          },
+        });
+
+        console.log(
+          `Game Loss Commission → Master: +৳${masterCommission} to ${master.username}`,
+        );
+      }
+
+      if (master.referredBy) {
+        const superAff = await Admin.findById(master.referredBy);
+
+        if (
+          superAff &&
+          superAff.role === "super-affiliate" &&
+          toNum(superAff.gameLossCommission) > masterRate
+        ) {
+          const superRate = toNum(superAff.gameLossCommission);
+          const totalSuperCommission = money(amount * (superRate / 100));
+          const superBonus = money(totalSuperCommission - masterCommission);
+
+          if (superBonus > 0) {
+            await Admin.findByIdAndUpdate(superAff._id, {
+              $inc: {
+                gameLossCommissionBalance: superBonus,
+              },
+            });
+
+            console.log(
+              `Game Loss Bonus → Super: +৳${superBonus} to ${superAff.username}`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  if (resultType === "win") {
+    const masterRate = toNum(master.gameWinCommission);
+
+    if (masterRate > 0) {
+      const masterCommission = money(amount * (masterRate / 100));
+
+      if (masterCommission > 0) {
+        await Admin.findByIdAndUpdate(master._id, {
+          $inc: {
+            gameWinCommissionBalance: masterCommission,
+          },
+        });
+
+        console.log(
+          `Game Win Commission → Master: +৳${masterCommission} to ${master.username}`,
+        );
+      }
+
+      if (master.referredBy) {
+        const superAff = await Admin.findById(master.referredBy);
+
+        if (
+          superAff &&
+          superAff.role === "super-affiliate" &&
+          toNum(superAff.gameWinCommission) > masterRate
+        ) {
+          const superRate = toNum(superAff.gameWinCommission);
+          const totalSuperCommission = money(amount * (superRate / 100));
+          const superBonus = money(totalSuperCommission - masterCommission);
+
+          if (superBonus > 0) {
+            await Admin.findByIdAndUpdate(superAff._id, {
+              $inc: {
+                gameWinCommissionBalance: superBonus,
+              },
+            });
+
+            console.log(
+              `Game Win Bonus → Super: +৳${superBonus} to ${superAff.username}`,
+            );
+          }
+        }
+      }
+    }
+  }
+};
+
 router.post("/", async (req, res) => {
   try {
-    let {
-      account_id,
-      username,
-      provider_code,
-      amount,
-      game_code,
-      verification_key,
-      bet_type,
-      transaction_id,
-      times,
-      round_id,
-      bet_details,
-    } = req.body;
+    console.log("\n================ ORACLE CALLBACK RECEIVED ================");
+    console.log("Time:", new Date().toISOString());
+    console.log("Headers:", req.headers);
+    console.log("Body:", JSON.stringify(req.body, null, 2));
+    console.log("=========================================================\n");
 
-    console.log("Callback received →", {
-      account_id,
-      username,
-      provider_code,
-      amount,
-      game_code,
-      bet_type,
-      transaction_id,
-      verification_key,
-    });
-
-    // ✅ IMPORTANT FIX: username আর substring করা হবে না
-    username = String(username || "").trim();
-    provider_code = String(provider_code || "").trim().toUpperCase();
-    game_code = String(game_code || "").trim();
-    bet_type = String(bet_type || "").trim().toUpperCase();
-
-    transaction_id = transaction_id ? String(transaction_id).trim() : undefined;
-    verification_key = verification_key
-      ? String(verification_key).trim()
-      : undefined;
+    const {
+      game_uid,
+      game_round,
+      bet_amount,
+      serial_number,
+      win_amount,
+      member_account,
+      currency_code,
+      timestamp,
+    } = req.body || {};
 
     if (
-      !username ||
-      !provider_code ||
-      amount === undefined ||
-      amount === null ||
-      !game_code ||
-      !bet_type
+      !game_uid ||
+      !game_round ||
+      !serial_number ||
+      bet_amount === undefined ||
+      win_amount === undefined ||
+      !member_account
     ) {
-      return res.status(400).json({
+      return res.status(200).json({
         success: false,
-        message: "Required fields missing.",
+        balance: 0,
+        message: "Missing required fields",
       });
     }
 
-    if (!["BET", "SETTLE", "CANCEL", "REFUND"].includes(bet_type)) {
-      return res.status(400).json({
+    const gameUId = clean(game_uid);
+    const gameRound = clean(game_round);
+    const serialNumber = clean(serial_number);
+    const rawMemberAccount = clean(member_account);
+    const userGamePlayName = cleanMemberAccount(member_account);
+
+    const betAmount = money(bet_amount);
+    const winAmount = money(win_amount);
+
+    if (betAmount < 0 || winAmount < 0) {
+      return res.status(200).json({
         success: false,
-        message: "Invalid bet_type.",
+        balance: 0,
+        message: "Invalid amount",
       });
     }
 
-    const amountFloat = Number(amount);
+    const duplicate = await GameHistory.findOne({
+      $or: [{ serial_number: serialNumber }, { game_round: gameRound }],
+    }).lean();
 
-    if (!Number.isFinite(amountFloat)) {
-      return res.status(400).json({
+    if (duplicate) {
+      return res.status(200).json({
         success: false,
-        message: "Invalid amount.",
+        balance: duplicate.balance_after || 0,
+        message: "DUPLICATE",
+        data: {
+          status: "DUPLICATE",
+          balance: duplicate.balance_after || 0,
+          game_round: gameRound,
+          serial_number: serialNumber,
+        },
       });
     }
 
-    if (verification_key) {
-      const existingHistory = await GameHistory.findOne({ verification_key });
-
-      if (existingHistory) {
-        console.log(
-          `Duplicate callback ignored verification_key: ${verification_key}`,
-        );
-
-        return res.status(200).json({
-          success: true,
-          message: "Duplicate verification key ignored.",
-        });
-      }
-    }
-
-    if (transaction_id) {
-      const existingTransaction = await GameHistory.findOne({
-        transaction_id,
-        bet_type,
-      });
-
-      if (existingTransaction) {
-        console.log(
-          `Duplicate callback ignored transaction_id: ${transaction_id}, bet_type: ${bet_type}`,
-        );
-
-        return res.status(200).json({
-          success: true,
-          message: "Duplicate transaction ignored.",
-        });
-      }
-    }
-
-    const player = await Admin.findOne({ username });
-
-    if (!player) {
-      console.log("User not found for callback username:", username);
-
-      return res.status(404).json({
-        success: false,
-        message: "User not found!",
-      });
-    }
-
-    console.log("Matched player →", {
-      id: player._id,
-      username: player.username,
-      oldBalance: player.balance,
+    const player = await Admin.findOne({
+      userGamePlayName,
+      isActive: true,
+      role: "user",
     });
 
-    let isPlayerLoss = false;
-    let isPlayerWin = false;
-    let playerNetChange = 0;
-
-    if (bet_type === "BET") {
-      playerNetChange = -Math.abs(amountFloat);
-      isPlayerLoss = true;
+    if (!player) {
+      return res.status(200).json({
+        success: false,
+        balance: 0,
+        message: "USER_NOT_FOUND",
+        data: {
+          member_account: rawMemberAccount,
+          userGamePlayName,
+        },
+      });
     }
 
-    if (bet_type === "SETTLE") {
-      playerNetChange = amountFloat;
+    const currentBalance = money(player.balance || 0);
 
-      if (amountFloat > 0) {
-        isPlayerWin = true;
-      }
-
-      if (amountFloat < 0) {
-        isPlayerLoss = true;
-      }
+    if (currentBalance < betAmount) {
+      return res.status(200).json({
+        success: false,
+        balance: currentBalance,
+        message: "INSUFFICIENT_BALANCE",
+        data: {
+          status: "INSUFFICIENT_BALANCE",
+          balance: currentBalance,
+          currentBalance,
+          betAmount,
+          game_round: gameRound,
+          serial_number: serialNumber,
+        },
+      });
     }
 
-    if (bet_type === "CANCEL" || bet_type === "REFUND") {
-      playerNetChange = Math.abs(amountFloat);
-    }
+    const netAmount = money(winAmount - betAmount);
 
-    const balanceBefore = num(player.balance);
-    const newBalance = balanceBefore + playerNetChange;
+    let resultType = "push";
+    if (netAmount > 0) resultType = "win";
+    if (netAmount < 0) resultType = "loss";
 
-    const gameRecord = {
-      username,
-      provider_code,
-      game_code,
-      bet_type,
-      amount: amountFloat,
-      transaction_id,
-      verification_key,
-      times: times || null,
-      round_id: round_id || null,
-      bet_details: bet_details || null,
-      status:
-        bet_type === "CANCEL"
-          ? "cancelled"
-          : bet_type === "REFUND"
-            ? "refunded"
-            : isPlayerWin
-              ? "won"
-              : isPlayerLoss
-                ? "lost"
-                : "push",
-      balanceBefore,
-      balanceAfter: newBalance,
-    };
-
-    const createdHistory = await GameHistory.create(gameRecord);
+    const newBalance = money(currentBalance - betAmount + winAmount);
 
     const updatedPlayer = await Admin.findByIdAndUpdate(
       player._id,
@@ -268,150 +331,95 @@ router.post("/", async (req, res) => {
           balance: newBalance,
         },
       },
-      {
-        new: true,
-      },
+      { new: true },
     );
 
-    if (!updatedPlayer) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to update player balance.",
-      });
-    }
+    const finalBalance = money(updatedPlayer.balance || 0);
 
-    if (["BET", "SETTLE"].includes(bet_type)) {
+    const history = await GameHistory.create({
+      user: player._id,
+      userId: player.userId || player.username,
+      userGamePlayName: player.userGamePlayName,
+      member_account: rawMemberAccount,
+      phone: player.whatsapp || player.phone || "",
+      currency: currency_code || player.currency || "BDT",
+      userRole: player.role || "user",
+
+      game_uid: gameUId,
+      game_round: gameRound,
+      serial_number: serialNumber,
+
+      bet_amount: betAmount,
+      win_amount: winAmount,
+      net_amount: netAmount,
+      resultType,
+
+      balance_before: currentBalance,
+      balance_after: finalBalance,
+
+      oracleTimestamp: clean(timestamp),
+      rawPayload: req.body || {},
+    });
+
+    if (betAmount > 0) {
       await applyTurnoverProgress({
         userId: player._id,
-        username,
-        amount: amountFloat,
+        username: player.username,
+        wagerAmount: betAmount,
       });
     }
 
-    if (isPlayerLoss && player.referredBy) {
-      const lossAmount = Math.abs(playerNetChange);
-
-      const master = await Admin.findById(player.referredBy);
-
-      if (master && num(master.gameLossCommission) > 0) {
-        const masterRate = num(master.gameLossCommission) / 100;
-        const masterCommission = lossAmount * masterRate;
-
-        if (masterCommission > 0) {
-          await Admin.findByIdAndUpdate(master._id, {
-            $inc: {
-              gameLossCommissionBalance: masterCommission,
-            },
-          });
-
-          console.log(
-            `Game Loss Commission → Master: +৳${masterCommission.toFixed(2)} to ${master.username}`,
-          );
-        }
-
-        if (master.referredBy) {
-          const superAff = await Admin.findById(master.referredBy);
-
-          if (
-            superAff &&
-            superAff.role === "super-affiliate" &&
-            num(superAff.gameLossCommission) > num(master.gameLossCommission)
-          ) {
-            const superRate = num(superAff.gameLossCommission) / 100;
-            const totalSuperCommission = lossAmount * superRate;
-            const superBonus = totalSuperCommission - masterCommission;
-
-            if (superBonus > 0) {
-              await Admin.findByIdAndUpdate(superAff._id, {
-                $inc: {
-                  gameLossCommissionBalance: superBonus,
-                },
-              });
-
-              console.log(
-                `Game Loss Bonus → Super: +৳${superBonus.toFixed(2)} to ${superAff.username}`,
-              );
-            }
-          }
-        }
-      }
+    if (resultType === "loss") {
+      await applyAffiliateCommission({
+        player,
+        resultType: "loss",
+        baseAmount: Math.abs(netAmount),
+      });
     }
 
-    if (isPlayerWin && player.referredBy) {
-      const winAmount = Math.abs(playerNetChange);
-
-      const master = await Admin.findById(player.referredBy);
-
-      if (master && num(master.gameWinCommission) > 0) {
-        const masterRate = num(master.gameWinCommission) / 100;
-        const masterCommission = winAmount * masterRate;
-
-        if (masterCommission > 0) {
-          await Admin.findByIdAndUpdate(master._id, {
-            $inc: {
-              gameWinCommissionBalance: masterCommission,
-            },
-          });
-
-          console.log(
-            `Game Win Commission → Master: +৳${masterCommission.toFixed(2)} to ${master.username}`,
-          );
-        }
-
-        if (master.referredBy) {
-          const superAff = await Admin.findById(master.referredBy);
-
-          if (
-            superAff &&
-            superAff.role === "super-affiliate" &&
-            num(superAff.gameWinCommission) > num(master.gameWinCommission)
-          ) {
-            const superRate = num(superAff.gameWinCommission) / 100;
-            const totalSuperCommission = winAmount * superRate;
-            const superBonus = totalSuperCommission - masterCommission;
-
-            if (superBonus > 0) {
-              await Admin.findByIdAndUpdate(superAff._id, {
-                $inc: {
-                  gameWinCommissionBalance: superBonus,
-                },
-              });
-
-              console.log(
-                `Game Win Bonus → Super: +৳${superBonus.toFixed(2)} to ${superAff.username}`,
-              );
-            }
-          }
-        }
-      }
+    if (resultType === "win") {
+      await applyAffiliateCommission({
+        player,
+        resultType: "win",
+        baseAmount: Math.abs(netAmount),
+      });
     }
-
-    console.log("Callback processed successfully →", {
-      username,
-      bet_type,
-      amount: amountFloat,
-      oldBalance: balanceBefore,
-      newBalance: updatedPlayer.balance,
-    });
 
     return res.status(200).json({
       success: true,
-      message: "Callback processed successfully.",
+      balance: finalBalance,
+      message: "SUCCESS",
       data: {
-        username,
-        old_balance: balanceBefore,
-        new_balance: updatedPlayer.balance,
-        balance_change: playerNetChange,
-        gameRecord: createdHistory,
+        status: "SUCCESS",
+        resultType,
+        betAmount,
+        winAmount,
+        netAmount,
+        balanceBefore: currentBalance,
+        newBalance: finalBalance,
+        game_round: gameRound,
+        serial_number: serialNumber,
+        historyId: history._id,
       },
     });
   } catch (error) {
-    console.error("Callback error:", error);
+    console.error("Callback Error:", error.message);
 
-    return res.status(500).json({
+    if (error?.code === 11000) {
+      return res.status(200).json({
+        success: false,
+        balance: 0,
+        message: "DUPLICATE",
+        data: {
+          status: "DUPLICATE",
+        },
+      });
+    }
+
+    return res.status(200).json({
       success: false,
-      message: "Server error",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      balance: 0,
+      message: "Internal processing error, but acknowledged",
     });
   }
 });

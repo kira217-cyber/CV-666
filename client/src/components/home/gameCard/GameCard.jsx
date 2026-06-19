@@ -7,6 +7,7 @@ import "swiper/css/grid";
 import { useEffect, useRef, useState, useContext, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+
 import Modal from "@/components/home/modal/Modal";
 import Login from "@/components/shared/login/Login";
 import RegistrationModal from "@/components/shared/login/RegistrationModal";
@@ -16,9 +17,6 @@ const API =
   import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
   import.meta.env.VITE_API_URL ||
   "http://localhost:5002";
-
-const ORACLE_BASE = "https://api.oraclegames.live/api";
-const ORACLE_KEY = import.meta.env.VITE_ORACLE_TOKEN;
 
 const getUploadImage = (path = "") => {
   if (!path) return "/placeholder-game.png";
@@ -35,23 +33,29 @@ const normalizeText = (value = "") =>
 const FLAG_BY_TITLE = {
   "HOT GAMES": "isHot",
   "HOT GAME": "isHot",
-  FAVORITES: "isFavorites",
-  FAVORITE: "isFavorites",
-  SLOT: "isSlots",
-  SLOTS: "isSlots",
-  LIVE: "isLiveCasino",
-  "LIVE CASINO": "isLiveCasino",
-  CASINO: "isLiveCasino",
-  SPORTS: "isEsports",
-  "E-SPORTS": "isEsports",
-  ESPORTS: "isEsports",
-  POKER: "isPoker",
-  POCKER: "isPoker",
-  FISHING: "isFishing",
-  FISH: "isFishing",
-  LOTTERY: "isLottery",
-  LATEST: "isLatest",
+  HOME: "isHome",
+  "HOME GAMES": "isHome",
   JACKPOT: "isJackpot",
+  "JACKPOT GAMES": "isJackpot",
+};
+
+const getGameName = (game) => {
+  return (
+    game?.gameName ||
+    game?.oracle?.name ||
+    game?.name ||
+    game?.gameName ||
+    game?.title ||
+    game?.gameId ||
+    "Game"
+  );
+};
+
+const getGameImage = (game) => {
+  if (game?.gameImage) return game.gameImage;
+  if (game?.image) return getUploadImage(game.image);
+  if (game?.oracle?.image) return game.oracle.image;
+  return "/placeholder-game.png";
 };
 
 const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
@@ -71,30 +75,14 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
       viewAll: "View All",
       playGame: "Play Game",
       hotGames: "Hot Games",
-      favorites: "Favorites",
-      slots: "Slots",
-      live: "Live Casino",
-      sports: "Sports",
-      esports: "E-Sports",
-      poker: "Poker",
-      fishing: "Fishing",
-      lottery: "Lottery",
-      latest: "Latest",
+      homeGames: "Home Games",
       jackpot: "Jackpot",
     },
     bn: {
       viewAll: "সব দেখুন",
       playGame: "খেলুন",
       hotGames: "গরম খেলা",
-      favorites: "পছন্দের গেমস",
-      slots: "স্লট",
-      live: "লাইভ ক্যাসিনো",
-      sports: "স্পোর্টস",
-      esports: "ই-স্পোর্টস",
-      poker: "পোকার",
-      fishing: "ফিশিং",
-      lottery: "লটারি",
-      latest: "লেটেস্ট",
+      homeGames: "হোম গেমস",
       jackpot: "জ্যাকপট",
     },
   };
@@ -108,7 +96,10 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
 
   const fetchCategories = async () => {
     try {
-      const { data } = await axios.get(`${API}/api/categories/active`);
+      const { data } = await axios.get(
+        `${API}/api/public-games/categories/active`,
+      );
+
       setCategories(data?.data || []);
     } catch {
       setCategories([]);
@@ -145,22 +136,10 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
     const map = {
       "HOT GAMES": translate("hotGames"),
       "HOT GAME": translate("hotGames"),
-      FAVORITES: translate("favorites"),
-      SLOT: translate("slots"),
-      SLOTS: translate("slots"),
-      LIVE: translate("live"),
-      "LIVE CASINO": translate("live"),
-      CASINO: translate("live"),
-      SPORTS: translate("sports"),
-      "E-SPORTS": translate("esports"),
-      ESPORTS: translate("esports"),
-      POKER: translate("poker"),
-      POCKER: translate("poker"),
-      FISHING: translate("fishing"),
-      FISH: translate("fishing"),
-      LOTTERY: translate("lottery"),
-      LATEST: translate("latest"),
+      HOME: translate("homeGames"),
+      "HOME GAMES": translate("homeGames"),
       JACKPOT: translate("jackpot"),
+      "JACKPOT GAMES": translate("jackpot"),
     };
 
     return map[normalizedTitle] || title;
@@ -169,73 +148,9 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
   const viewAllPath = useMemo(() => {
     if (parentId) return `/category/${parentId}`;
     if (matchedCategory?._id) return `/category/${matchedCategory._id}`;
+    if (flagKey === "isHot") return "/hot-games";
     return "/";
-  }, [parentId, matchedCategory]);
-
-  const getGameName = (game) => {
-    return (
-      game?.apiData?.name ||
-      game?.apiData?.gameName ||
-      game?.name ||
-      game?.gameName ||
-      game?.title ||
-      game?.gameId ||
-      "Game"
-    );
-  };
-
-  const getGameImage = (game) => {
-    if (game?.image) {
-      return getUploadImage(game.image);
-    }
-
-    const imgPath =
-      game?.apiData?.image ||
-      game?.apiData?.img ||
-      game?.apiData?.thumbnail ||
-      game?.imageUrl ||
-      game?.img ||
-      game?.thumbnail ||
-      "";
-
-    if (!imgPath) return "/placeholder-game.png";
-    if (/^https?:\/\//i.test(imgPath)) return imgPath;
-
-    return `${ORACLE_BASE.replace("/api", "")}/${imgPath}`;
-  };
-
-  const fetchOracleDetails = async (gameDocs = []) => {
-    const ids = gameDocs.map((item) => item.gameId).filter(Boolean);
-
-    if (!ids.length) return gameDocs;
-
-    try {
-      const { data } = await axios.post(
-        `${ORACLE_BASE}/games/by-ids`,
-        { ids },
-        {
-          headers: {
-            "x-api-key": ORACLE_KEY,
-          },
-        },
-      );
-
-      const oracleGames = data?.data || data?.games || [];
-      const map = new Map();
-
-      oracleGames.forEach((item) => {
-        const id = item?._id || item?.id || item?.gameId || item?.gameID;
-        if (id) map.set(String(id), item);
-      });
-
-      return gameDocs.map((doc) => ({
-        ...doc,
-        apiData: map.get(String(doc.gameId)) || null,
-      }));
-    } catch {
-      return gameDocs;
-    }
-  };
+  }, [parentId, matchedCategory, flagKey]);
 
   const fetchGames = async () => {
     if (!flagKey) {
@@ -244,22 +159,22 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
     }
 
     try {
-      const params = new URLSearchParams();
-      params.set("status", "active");
-      params.set(flagKey, "true");
+      const params = {
+        status: "active",
+        [flagKey]: true,
+      };
 
       if (matchedCategory?._id) {
-        params.set("categoryId", matchedCategory._id);
+        params.categoryId = matchedCategory._id;
       } else if (parentId) {
-        params.set("categoryId", parentId);
+        params.categoryId = parentId;
       }
 
-      const { data } = await axios.get(`${API}/api/games?${params.toString()}`);
+      const { data } = await axios.get(`${API}/api/public-games`, {
+        params,
+      });
 
-      const docs = data?.data || [];
-      const withOracleData = await fetchOracleDetails(docs);
-
-      setServerGames(withOracleData);
+      setServerGames(data?.data || []);
     } catch {
       setServerGames(games || []);
     }
@@ -267,11 +182,14 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
 
   useEffect(() => {
     fetchGames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flagKey, matchedCategory?._id, parentId, games.length]);
 
   const displayGames = flagKey ? serverGames : games;
   const hasGames = displayGames.length > 0;
-  const hasCategoryRoute = Boolean(parentId || matchedCategory?._id);
+  const hasCategoryRoute = Boolean(
+    parentId || matchedCategory?._id || flagKey === "isHot",
+  );
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 767);
@@ -367,6 +285,7 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
           </Link>
 
           <button
+            type="button"
             onClick={slidePrev}
             className="p-1.5 rounded-lg bg-[#003840]/80 hover:bg-[#00ffaa]/20 border border-[#00ffaa]/30 text-white transition-all cursor-pointer"
           >
@@ -374,6 +293,7 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
           </button>
 
           <button
+            type="button"
             onClick={slideNext}
             className="p-1.5 rounded-lg bg-[#003840]/80 hover:bg-[#00ffaa]/20 border border-[#00ffaa]/30 text-white transition-all cursor-pointer"
           >
@@ -405,7 +325,7 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
         style={{ padding: "0 5px" }}
       >
         {displayGames.map((game, index) => (
-          <SwiperSlide key={game._id || index}>
+          <SwiperSlide key={game._id || game.gameId || index}>
             <div
               className="relative group overflow-hidden rounded-xl shadow-2xl cursor-pointer transition-all duration-500 hover:scale-105 auto-shine"
               style={{
@@ -423,14 +343,15 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
                   src={getGameImage(game)}
                   alt={getGameName(game)}
                   className="w-full h-full object-cover rounded-xl border-2 border-white"
-                  // onError={(e) => {
-                  //   e.currentTarget.src = "/placeholder-game.png";
-                  // }}
+                  onError={(e) => {
+                    e.currentTarget.src = "/placeholder-game.png";
+                  }}
                 />
               </div>
 
               <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700 px-1 uppercase">
                 <button
+                  type="button"
                   onClick={(event) => {
                     event.stopPropagation();
                     handlePlayClick(game);
@@ -453,6 +374,7 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t-4 border-[#00ffaa] shadow-2xl transition-transform duration-300">
           <div className="flex flex-col p-4">
             <button
+              type="button"
               onClick={() => setSelectedGame(null)}
               className="absolute top-3 right-3 text-gray-600 hover:text-black cursor-pointer"
             >
@@ -464,9 +386,9 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
                 src={getGameImage(selectedGame)}
                 className="w-24 h-24 object-cover rounded-xl shadow-lg border-2 border-[#00ffaa] -mt-12"
                 alt={getGameName(selectedGame)}
-                // onError={(e) => {
-                //   e.currentTarget.src = "/placeholder-game.png";
-                // }}
+                onError={(e) => {
+                  e.currentTarget.src = "/placeholder-game.png";
+                }}
               />
 
               <h3 className="text-lg font-bold text-gray-800 truncate">
@@ -475,6 +397,7 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
             </div>
 
             <button
+              type="button"
               onClick={() => handlePlayClick(selectedGame)}
               className="w-full py-4 bg-gradient-to-r from-[#2563eb] to-[#3b82f6] text-white text-lg font-bold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 cursor-pointer"
             >

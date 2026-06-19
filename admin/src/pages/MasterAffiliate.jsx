@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   FaToggleOn,
@@ -10,6 +10,7 @@ import {
   FaPlus,
   FaSpinner,
   FaExclamationTriangle,
+  FaSearch,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 import { API_URL } from "../utils/baseURL";
@@ -19,6 +20,10 @@ export default function MasterAffiliate() {
   const [superAffiliates, setSuperAffiliates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [searchText, setSearchText] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const usersPerPage = 10;
 
   // View/Edit Modal
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -88,6 +93,63 @@ export default function MasterAffiliate() {
     fetchMasterAffiliates();
     fetchSuperAffiliates();
   }, []);
+
+  const filteredUsers = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+
+    if (!q) return users;
+
+    return users.filter((user) => {
+      const referredByText =
+        typeof user.referredBy === "object"
+          ? [
+              user.referredBy?.username,
+              user.referredBy?.email,
+              user.referredBy?.whatsapp,
+              user.referredBy?._id,
+            ]
+              .filter(Boolean)
+              .join(" ")
+          : user.referredBy || "";
+
+      const searchableText = [
+        user.username,
+        user.email,
+        user.whatsapp,
+        user.phone,
+        user.phoneNumber,
+        user.mobile,
+        user.userId,
+        user._id,
+        referredByText,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(q);
+    });
+  }, [users, searchText]);
+
+  const totalPages = Math.max(
+    Math.ceil(filteredUsers.length / usersPerPage),
+    1,
+  );
+
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * usersPerPage;
+    return filteredUsers.slice(startIndex, startIndex + usersPerPage);
+  }, [filteredUsers, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const handleToggleClick = (user) => {
     const isActive = user.isActive ?? false;
@@ -229,15 +291,99 @@ export default function MasterAffiliate() {
     }
   };
 
-  // Animation variants
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: (i) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05 } }),
   };
 
-  const modalVariants = {
-    hidden: { scale: 0.85, opacity: 0 },
-    visible: { scale: 1, opacity: 1, transition: { duration: 0.3 } },
+  const Pagination = () => {
+    if (filteredUsers.length === 0) return null;
+
+    const pageNumbers = [];
+
+    for (let i = 1; i <= totalPages; i++) {
+      if (
+        i === 1 ||
+        i === totalPages ||
+        (i >= currentPage - 1 && i <= currentPage + 1)
+      ) {
+        pageNumbers.push(i);
+      }
+    }
+
+    const uniquePages = [...new Set(pageNumbers)];
+
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 mb-10">
+        <p className="text-gray-300 text-sm">
+          Showing{" "}
+          <span className="text-emerald-300 font-semibold">
+            {(currentPage - 1) * usersPerPage + 1}
+          </span>{" "}
+          to{" "}
+          <span className="text-emerald-300 font-semibold">
+            {Math.min(currentPage * usersPerPage, filteredUsers.length)}
+          </span>{" "}
+          of{" "}
+          <span className="text-emerald-300 font-semibold">
+            {filteredUsers.length}
+          </span>{" "}
+          users
+        </p>
+
+        <div className="flex items-center gap-2 flex-wrap justify-center">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            className={`px-4 py-2 rounded-xl font-semibold border transition-all cursor-pointer ${
+              currentPage === 1
+                ? "bg-gray-800/60 text-gray-500 border-gray-700 cursor-not-allowed"
+                : "bg-gray-800/80 hover:bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+            }`}
+          >
+            Prev
+          </button>
+
+          {uniquePages.map((page, index) => {
+            const prevPage = uniquePages[index - 1];
+            const showDots = index > 0 && page - prevPage > 1;
+
+            return (
+              <React.Fragment key={page}>
+                {showDots && <span className="text-gray-400 px-1">...</span>}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-4 py-2 rounded-xl font-semibold border transition-all cursor-pointer ${
+                    currentPage === page
+                      ? "bg-gradient-to-r from-amber-600 to-orange-600 text-white border-amber-500 shadow-lg"
+                      : "bg-gray-800/80 hover:bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+                  }`}
+                >
+                  {page}
+                </button>
+              </React.Fragment>
+            );
+          })}
+
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() =>
+              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+            }
+            className={`px-4 py-2 rounded-xl font-semibold border transition-all cursor-pointer ${
+              currentPage === totalPages
+                ? "bg-gray-800/60 text-gray-500 border-gray-700 cursor-not-allowed"
+                : "bg-gray-800/80 hover:bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+            }`}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -279,6 +425,20 @@ export default function MasterAffiliate() {
           </p>
         </div>
 
+        {/* Search Bar */}
+        <div className="mb-6 bg-gray-900/40 backdrop-blur-md border border-emerald-800/40 rounded-2xl p-4 shadow-2xl">
+          <div className="relative">
+            <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-400" />
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search by username, phone, email, whatsapp..."
+              className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl pl-12 pr-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
+            />
+          </div>
+        </div>
+
         {/* Create Button */}
         <div className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-50">
           <motion.button
@@ -292,7 +452,7 @@ export default function MasterAffiliate() {
           </motion.button>
         </div>
 
-        {users.length === 0 ? (
+        {filteredUsers.length === 0 ? (
           <div className="text-center py-20 text-gray-400 text-xl">
             No Master Affiliates found
           </div>
@@ -330,7 +490,7 @@ export default function MasterAffiliate() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user, idx) => {
+                  {paginatedUsers.map((user, idx) => {
                     const isActive = user.isActive ?? false;
                     return (
                       <motion.tr
@@ -397,7 +557,7 @@ export default function MasterAffiliate() {
 
             {/* Mobile Cards */}
             <div className="lg:hidden space-y-5 mt-6">
-              {users.map((user, idx) => {
+              {paginatedUsers.map((user, idx) => {
                 const isActive = user.isActive ?? false;
                 return (
                   <motion.div
@@ -473,6 +633,8 @@ export default function MasterAffiliate() {
                 );
               })}
             </div>
+
+            <Pagination />
           </>
         )}
       </div>
@@ -501,7 +663,7 @@ export default function MasterAffiliate() {
                     setCreateForm({ ...createForm, username: e.target.value })
                   }
                   required
-                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                 />
               </div>
 
@@ -516,7 +678,7 @@ export default function MasterAffiliate() {
                     setCreateForm({ ...createForm, email: e.target.value })
                   }
                   required
-                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                 />
               </div>
 
@@ -532,12 +694,12 @@ export default function MasterAffiliate() {
                       setCreateForm({ ...createForm, password: e.target.value })
                     }
                     required
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 pr-12"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 pr-12 cursor-text"
                   />
                   <button
                     type="button"
                     onClick={() => setShowCreatePassword(!showCreatePassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-300"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-300 cursor-pointer"
                   >
                     {showCreatePassword ? <FaEyeSlash /> : <FaEye />}
                   </button>
@@ -555,7 +717,7 @@ export default function MasterAffiliate() {
                     setCreateForm({ ...createForm, whatsapp: e.target.value })
                   }
                   required
-                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                 />
               </div>
 
@@ -595,7 +757,7 @@ export default function MasterAffiliate() {
                         gameLossCommission: e.target.value,
                       })
                     }
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
                 <div>
@@ -612,7 +774,7 @@ export default function MasterAffiliate() {
                         gameWinCommission: e.target.value,
                       })
                     }
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
                 <div>
@@ -629,7 +791,7 @@ export default function MasterAffiliate() {
                         depositCommission: e.target.value,
                       })
                     }
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
                 <div>
@@ -646,7 +808,7 @@ export default function MasterAffiliate() {
                         referCommission: e.target.value,
                       })
                     }
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
               </div>
@@ -710,7 +872,7 @@ export default function MasterAffiliate() {
                     })
                   }
                   required
-                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                  className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                 />
               </div>
 
@@ -729,12 +891,12 @@ export default function MasterAffiliate() {
                       })
                     }
                     placeholder="Leave blank to keep current"
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 pr-12"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 pr-12 cursor-text"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-300"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-300 cursor-pointer"
                   >
                     {showPassword ? <FaEyeSlash /> : <FaEye />}
                   </button>
@@ -794,7 +956,7 @@ export default function MasterAffiliate() {
                       })
                     }
                     min="0"
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
 
@@ -813,7 +975,7 @@ export default function MasterAffiliate() {
                       })
                     }
                     min="0"
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
 
@@ -832,7 +994,7 @@ export default function MasterAffiliate() {
                       })
                     }
                     min="0"
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
 
@@ -851,7 +1013,7 @@ export default function MasterAffiliate() {
                       })
                     }
                     min="0"
-                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full bg-gray-900/60 border border-emerald-800/50 rounded-xl px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/30 cursor-text"
                   />
                 </div>
               </div>

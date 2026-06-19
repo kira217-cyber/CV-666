@@ -13,6 +13,14 @@ const adminSchema = new mongoose.Schema(
       sparse: true,
       default: undefined, // ⭐ খুব গুরুত্বপূর্ণ
     },
+    userGamePlayName: {
+      type: String,
+      default: null,
+      trim: true,
+      lowercase: true,
+      minlength: 10,
+      maxlength: 10,
+    },
     whatsapp: { type: String, required: true },
     password: { type: String, required: true },
     role: {

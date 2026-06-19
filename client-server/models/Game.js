@@ -20,6 +20,15 @@ const GameSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      index: true,
+    },
+
+    oracleImageType: {
+      type: String,
+      enum: ["thumbnail", "height", "original"],
+      default: "thumbnail",
+      required: true,
+      index: true,
     },
 
     image: {
@@ -53,9 +62,13 @@ const GameSchema = new mongoose.Schema(
       index: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 GameSchema.index({ providerDbId: 1, gameId: 1 }, { unique: true });
+GameSchema.index({ categoryId: 1, status: 1 });
+GameSchema.index({ providerDbId: 1, status: 1 });
 
-export default mongoose.model("Game", GameSchema);
+const Game = mongoose.models.Game || mongoose.model("Game", GameSchema);
+
+export default Game;

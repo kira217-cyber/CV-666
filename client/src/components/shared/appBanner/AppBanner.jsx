@@ -10,11 +10,12 @@ const PromoBanner = () => {
   // Translation
   const t = {
     en: {
-      appBonus: "APP Download",
+      appBonus: "Get ৳18 for App Download",
       download: "Download",
     },
+
     bn: {
-      appBonus: "অ্যাপ ডাউনলোড",
+      appBonus: "অ্যাপ ডাউনলোডে ৳১৮ বোনাস",
       download: "ডাউনলোড",
     },
   };

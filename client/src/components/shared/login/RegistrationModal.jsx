@@ -96,6 +96,18 @@ const RegistrationModal = ({ onClose, openLogin, initialReferral }) => {
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("userId", data.user.id || data.user._id);
 
+      const token =
+        data?.token ||
+        data?.accessToken ||
+        data?.jwt ||
+        data?.data?.token ||
+        data?.data?.accessToken ||
+        "";
+
+      if (token) {
+        localStorage.setItem("token", token);
+      }
+
       setUser(data.user);
 
       toast.success(`${t.welcome} ${data.user.username}`);

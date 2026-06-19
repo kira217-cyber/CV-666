@@ -36,6 +36,8 @@ import gameHistoryRoutes from "./routes/gameHistoryRoutes.js";
 import gameProviderRoutes from "./routes/gameProviderRoutes.js";
 import gameRoutes from "./routes/gameRoutes.js";
 import playGameRoutes from "./routes/playGameRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
+import publicGameRoutes from "./routes/publicGameRoutes.js";
 
 
 
@@ -87,6 +89,8 @@ app.use("/api/game-history", gameHistoryRoutes);
 app.use("/api/game-providers", gameProviderRoutes);
 app.use("/api/games", gameRoutes);
 app.use("/api", playGameRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/public-games", publicGameRoutes);
 
 
 // Test route
