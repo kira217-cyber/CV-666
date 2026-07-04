@@ -165,7 +165,7 @@ const BattingRecord = () => {
   };
 
   return (
-    <div className="p-4 space-y-6 bg-gray-50 min-h-screen md:min-h-0 overflow-y-auto h-[500px] [scrollbar-width:none]">
+    <div className="p-4 space-y-6 bg-gray-50 min-h-screen md:min-h-0 overflow-y-auto max-h-[calc(100vh-320px)] pb-28 lg:pb-6 [scrollbar-width:none]">
       <div className="flex gap-8 lg:gap-12 text-sm lg:text-lg overflow-x-auto border-b border-gray-300 pb-2">
         {data.map((tab, i) => (
           <button
@@ -413,19 +413,17 @@ const BattingRecord = () => {
 
                       <div>
                         <p className="text-gray-500 text-xs">
-                          {isBn ? "পুরস্কার" : "Award"}
+                          {isBn ? "বৈধ বেট" : "Valid Bet"}
                         </p>
-                        <p className="font-medium text-green-600">
-                          ৳{money(award)}
-                        </p>
+                        <p className="font-medium">৳{money(betAmount)}</p>
                       </div>
 
                       <div>
                         <p className="text-gray-500 text-xs">
-                          {isBn ? "গেম UID" : "Game UID"}
+                          {isBn ? "পুরস্কার" : "Award"}
                         </p>
-                        <p className="font-medium">
-                          {row.game_uid || row.game_code || "-"}
+                        <p className="font-medium text-green-600">
+                          ৳{money(award)}
                         </p>
                       </div>
 
@@ -441,6 +439,24 @@ const BattingRecord = () => {
                           {pl >= 0 ? "+" : "-"}৳{money(Math.abs(pl))}
                         </p>
                       </div>
+
+                      <div>
+                        <p className="text-gray-500 text-xs">
+                          {isBn ? "গেম UID" : "Game UID"}
+                        </p>
+                        <p className="font-medium break-all">
+                          {row.game_uid || row.game_code || "-"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-gray-500 text-xs">
+                          {isBn ? "গেম রাউন্ড" : "Game Round"}
+                        </p>
+                        <p className="font-medium break-all">
+                          {row.game_round || row.verification_key || "-"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 );
@@ -448,8 +464,8 @@ const BattingRecord = () => {
             </div>
 
             {pagination.totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t">
-                <p className="text-sm text-gray-600">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t pb-8 lg:pb-4">
+                <p className="text-sm text-gray-600 text-center sm:text-left">
                   {isBn
                     ? `দেখানো হচ্ছে ${
                         (pagination.page - 1) * pagination.limit + 1
@@ -465,7 +481,7 @@ const BattingRecord = () => {
                       )} of ${pagination.total}`}
                 </p>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-center">
                   <button
                     onClick={() => paginate(currentPage - 1)}
                     disabled={currentPage === 1}
@@ -474,7 +490,7 @@ const BattingRecord = () => {
                     {isBn ? "আগে" : "Prev"}
                   </button>
 
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap justify-center">
                     {Array.from(
                       { length: pagination.totalPages },
                       (_, i) => i + 1,

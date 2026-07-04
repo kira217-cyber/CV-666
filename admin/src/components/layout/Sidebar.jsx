@@ -36,6 +36,7 @@ import {
   FaTimes,
   FaChevronDown,
   FaChevronUp,
+  FaGift,
 } from "react-icons/fa";
 import { IoFootstepsSharp, IoSettings } from "react-icons/io5";
 import { TfiLayoutSlider } from "react-icons/tfi";
@@ -204,6 +205,7 @@ const CustomSidebar = () => {
       icon: <IoMdAddCircle />,
       submenu: [
         { label: "Add Promotion", icon: <IoMdAdd />, to: "/add-promotion" },
+        { label: "Daily Bonus", icon: <FaGift />, to: "/daily-bonus" },
         { label: "Social Links", icon: <FaLink />, to: "/social-links" },
         {
           label: "Balance Transfer Control",

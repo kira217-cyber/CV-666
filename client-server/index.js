@@ -38,7 +38,9 @@ import gameRoutes from "./routes/gameRoutes.js";
 import playGameRoutes from "./routes/playGameRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import publicGameRoutes from "./routes/publicGameRoutes.js";
-
+import dailyBonusSettingRoutes from "./routes/dailyBonusSettingRoutes.js";
+import dailyBonusUserRoutes from "./routes/dailyBonusUserRoutes.js";
+import dailyBonusAdminRoutes from "./routes/dailyBonusAdminRoutes.js";
 
 
 dotenv.config();
@@ -91,6 +93,9 @@ app.use("/api/games", gameRoutes);
 app.use("/api", playGameRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/public-games", publicGameRoutes);
+app.use("/api/daily-bonus-settings", dailyBonusSettingRoutes);
+app.use("/api/daily-bonus/user", dailyBonusUserRoutes);
+app.use("/api/daily-bonus/admin", dailyBonusAdminRoutes);
 
 
 // Test route

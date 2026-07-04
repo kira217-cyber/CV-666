@@ -15,6 +15,7 @@ import b__2 from "../assets/22221.png";
 import SocialLinks from "@/components/shared/SocialLinks/SocialLinks";
 import PromotionModal from "@/components/home/Promotions/PromotionModal";
 import Login from "@/components/shared/login/Login";
+import AccountModal from "@/components/AccountModal/AccountModal";
 
 const translations = {
   en: {
@@ -91,6 +92,7 @@ const MainLayout = () => {
   });
 
   const [showLogo, setShowLogo] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
   const dispatch = useDispatch();
   const { isAuth } = useSelector((state) => state.auth);
@@ -170,6 +172,11 @@ const MainLayout = () => {
   const handleTabOpen = (tabId) => {
     if (!user) {
       if (setIsLoginModalOpen) setIsLoginModalOpen(true);
+      return;
+    }
+
+    if (tabId === "tab1") {
+      setIsAccountModalOpen(true);
       return;
     }
 
@@ -270,6 +277,12 @@ const MainLayout = () => {
             setIsLoginModalOpen(false);
             if (setIsRegisterModalOpen) setIsRegisterModalOpen(true);
           }}
+        />
+      )}
+      {isAccountModalOpen && (
+        <AccountModal
+          open={isAccountModalOpen}
+          onClose={() => setIsAccountModalOpen(false)}
         />
       )}
     </div>

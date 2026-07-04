@@ -54,6 +54,7 @@ import OracleWalletAgent from "../pages/OracleWalletAgent";
 import OracleWalletAgentHistory from "../pages/OracleWalletAgentHistory";
 import Profile from "../pages/Profile";
 import CreateCategory from "../pages/CreateCategory";
+import DailyBonus from "../pages/DailyBonus";
 
 const AppRoutes = () => (
   <Routes>
@@ -141,6 +142,7 @@ const AppRoutes = () => (
     <Route path="/wallet-agent/history" element={<OracleWalletAgentHistory />} />
     <Route path="/create-category" element={<CreateCategory />} />
     <Route path="/profile" element={<Profile />} />
+    <Route path="/daily-bonus" element={<DailyBonus />} />
   </Routes>
 );
 

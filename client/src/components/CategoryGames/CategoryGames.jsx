@@ -111,9 +111,9 @@ const GameSection = ({ category, games, onPlay }) => {
                 src={getGameImage(game)}
                 alt={getGameName(game)}
                 className="w-full h-full object-cover rounded-xl border-2 border-white"
-                onError={(e) => {
-                  e.currentTarget.src = "/placeholder-game.png";
-                }}
+                // onError={(e) => {
+                //   e.currentTarget.src = "/placeholder-game.png";
+                // }}
               />
 
               <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700 px-1 uppercase">

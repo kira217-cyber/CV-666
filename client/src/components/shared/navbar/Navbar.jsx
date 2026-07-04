@@ -98,7 +98,7 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
       id: "tab4",
       label: "Betting Record",
       icon: <GiDiceSixFacesSix />,
-      link: "/information#tab4",
+      link: "/information#tab5",
     },
     {
       id: "tab9",

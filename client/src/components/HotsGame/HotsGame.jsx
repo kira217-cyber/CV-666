@@ -237,9 +237,9 @@ const HotsGame = () => {
                   src={getGameImage(game)}
                   alt={getGameName(game)}
                   className="w-full h-full object-cover rounded-xl border-2 border-white"
-                  onError={(e) => {
-                    e.currentTarget.src = "/placeholder-game.png";
-                  }}
+                  // onError={(e) => {
+                  //   e.currentTarget.src = "/placeholder-game.png";
+                  // }}
                 />
               </div>
 
@@ -280,9 +280,9 @@ const HotsGame = () => {
                 src={getGameImage(selectedGame)}
                 className="w-24 h-24 object-cover rounded-xl shadow-lg border-2 border-[#00ffaa] -mt-12"
                 alt={getGameName(selectedGame)}
-                onError={(e) => {
-                  e.currentTarget.src = "/placeholder-game.png";
-                }}
+                // onError={(e) => {
+                //   e.currentTarget.src = "/placeholder-game.png";
+                // }}
               />
 
               <h3 className="text-lg font-bold text-gray-800 truncate">

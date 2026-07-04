@@ -9,7 +9,7 @@ import PokerGame from "@/components/home/All Game/PokerGame";
 import LotteryGame from "@/components/home/All Game/LotteryGame";
 import FishGame from "@/components/home/All Game/FishGame";
 import MarqueeSlider from "@/components/home/Marque/MarqueeSlider";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchHomeGameMenu } from "@/features/home-game-menu/GameHomeMenuSliceAndThunks";
 import { fetchGameSection } from "@/features/GamePage/GamePageSliceAndThunk";
@@ -21,19 +21,32 @@ import { BiMoneyWithdraw } from "react-icons/bi";
 import { RiLuggageDepositFill } from "react-icons/ri";
 import HotsGame from "@/components/HotsGame/HotsGame";
 import CategoryGames from "@/components/CategoryGames/CategoryGames";
+import { AuthContext } from "@/Context/AuthContext";
+import DownloadModal from "@/components/DownloadModal/DownloadModal";
 
 const Home = () => {
   const dispatch = useDispatch();
+  const { user } = useContext(AuthContext);
+
   const [allHotGames, setAllHotGames] = useState([]);
-  const [showOverlay, setShowOverlay] = useState(false); // ডিফল্টভাবে ব্যানার বন্ধ
+  const [showOverlay, setShowOverlay] = useState(false);
   const [isInformationModalOpen, setIsInformationModalOpen] = useState(false);
   const [tab, setTab] = useState();
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
   const { homeGameMenu, isLoading, isError, errorMessage } = useSelector(
     (state) => state.homeGameMenu,
   );
 
   const { data } = useSelector((state) => state.gameSection);
+
+  useEffect(() => {
+    if (!user) {
+      setIsDownloadModalOpen(true);
+    } else {
+      setIsDownloadModalOpen(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     const hotGames = data?.subMenu?.filter((item) =>
@@ -47,27 +60,20 @@ const Home = () => {
     dispatch(fetchGameSection());
   }, [dispatch]);
 
-  // ব্যানার টাইমিং লজিক
   useEffect(() => {
     const lastShownTime = localStorage.getItem("bannerLastShown");
     const currentTime = new Date().getTime();
-    const tenMinutes = 10 * 60 * 1000; // ১০ মিনিট মিলিসেকেন্ডে
+    const tenMinutes = 10 * 60 * 1000;
 
     if (!lastShownTime || currentTime - parseInt(lastShownTime) >= tenMinutes) {
-      //   setShowOverlay(true); // ব্যানার দেখানো হবে
-      //   setShowOverlay(true); // ব্যানার দেখানো হবে
-      localStorage.setItem("bannerLastShown", currentTime.toString()); // নতুন টাইমস্ট্যাম্প সেভ করা
+      localStorage.setItem("bannerLastShown", currentTime.toString());
     }
   }, []);
 
-  // addd
-
-  // ক্লোজ বাটন ক্লিক হ্যান্ডলার
   const handleCloseOverlay = () => {
     setShowOverlay(false);
   };
 
-  // Deposit এবং Withdraw বাটনের জন্য অ্যাকশন
   const actions = [
     {
       id: "tab2",
@@ -87,7 +93,11 @@ const Home = () => {
 
   return (
     <div className="px-3 sm:px-4">
-      {/* ওভারলে ডিভ */}
+      <DownloadModal
+        open={isDownloadModalOpen}
+        onClose={() => setIsDownloadModalOpen(false)}
+      />
+
       {showOverlay && (
         <div
           style={{
@@ -100,7 +110,7 @@ const Home = () => {
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            backgroundColor: "rgba(0, 0, 0, 0.5)", // সেমি-ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
           }}
         >
           <div
@@ -137,6 +147,7 @@ const Home = () => {
                 </h2>
               </div>
             </div>
+
             <div>
               <img
                 src={img}
@@ -144,6 +155,7 @@ const Home = () => {
                 style={{ width: "100%", height: "auto" }}
               />
             </div>
+
             <div
               style={{
                 marginTop: "16px",
@@ -154,6 +166,7 @@ const Home = () => {
             >
               <p>লাল খামের বৃষ্টি এসে গেছে!</p>
             </div>
+
             <div
               style={{
                 marginTop: "8px",
@@ -168,6 +181,7 @@ const Home = () => {
                 জেতার জন্য প্রস্তুত হন।
               </p>
             </div>
+
             <button
               onClick={handleCloseOverlay}
               style={{
@@ -191,7 +205,6 @@ const Home = () => {
       <MarqueeSlider />
       <BannerSlider />
 
-      {/* বাটনগুলোর জন্য কন্টেইনার */}
       <div
         style={{
           flexDirection: "row",
@@ -219,7 +232,6 @@ const Home = () => {
           borderTopColor: "#005461ff",
           transition: "all 0.3s ease",
           display: "none",
-          // display: "flex",
         }}
       >
         {actions.map((action, index) => (

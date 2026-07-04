@@ -7,7 +7,7 @@ import "react-loading-skeleton/dist/skeleton.css";
 const TransactionHistory = () => {
   const { language, userId } = useContext(AuthContext);
 
-  // 0: Manual Deposit, 1: Withdraw, 2: Auto Deposit
+  // 0: Auto Deposit, 1: Withdraw, 2: Manual Deposit
   const [activeMainTab, setActiveMainTab] = useState(0);
 
   const [depositHistory, setDepositHistory] = useState([]);
@@ -18,11 +18,11 @@ const TransactionHistory = () => {
   const [error, setError] = useState(null);
   const [dateFilter, setDateFilter] = useState("");
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 7;
 
   const API_URL = import.meta.env.VITE_API_URL;
+  const isBn = language === "bn";
 
   useEffect(() => {
     if (!userId) {
@@ -32,7 +32,10 @@ const TransactionHistory = () => {
 
     const fetchManualDeposits = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/deposit/deposit-transaction`);
+        const res = await axios.get(
+          `${API_URL}/api/deposit/deposit-transaction`,
+        );
+
         let allDeposits = [];
         if (Array.isArray(res.data)) allDeposits = res.data;
         else if (res.data?.deposits) allDeposits = res.data.deposits;
@@ -43,7 +46,10 @@ const TransactionHistory = () => {
           return itemUserId === userId;
         });
 
-        userDeposits.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        userDeposits.sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+        );
+
         setDepositHistory(userDeposits);
       } catch (err) {
         console.error("Deposit fetch error:", err);
@@ -54,6 +60,7 @@ const TransactionHistory = () => {
     const fetchWithdraws = async () => {
       try {
         const res = await axios.get(`${API_URL}/api/withdraw-transaction`);
+
         let allWithdraws = [];
         if (Array.isArray(res.data)) allWithdraws = res.data;
         else if (res.data?.withdraws) allWithdraws = res.data.withdraws;
@@ -64,7 +71,10 @@ const TransactionHistory = () => {
           return itemUserId === userId;
         });
 
-        userWithdraws.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        userWithdraws.sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+        );
+
         setWithdrawHistory(userWithdraws);
       } catch (err) {
         console.error("Withdraw fetch error:", err);
@@ -72,13 +82,16 @@ const TransactionHistory = () => {
       }
     };
 
-    // ✅ NEW: Auto Deposit (OraclePay)
     const fetchAutoDeposits = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/oraclepay-business/wallet-agent-history/${userId}`);
+        const res = await axios.get(
+          `${API_URL}/api/oraclepay-business/wallet-agent-history/${userId}`,
+        );
+
         const list = res?.data?.data || [];
-        // newest first already, but safe:
+
         list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
         setAutoDepositHistory(list);
       } catch (err) {
         console.error("Auto deposit fetch error:", err);
@@ -89,26 +102,47 @@ const TransactionHistory = () => {
     const loadAll = async () => {
       setLoading(true);
       setError(null);
-      await Promise.all([fetchManualDeposits(), fetchWithdraws(), fetchAutoDeposits()]);
-      setLoading(false);
+
+      try {
+        await Promise.all([
+          fetchAutoDeposits(),
+          fetchWithdraws(),
+          fetchManualDeposits(),
+        ]);
+      } catch (err) {
+        setError(
+          isBn
+            ? "লেনদেনের ইতিহাস লোড করতে সমস্যা হয়েছে"
+            : "Failed to load transaction history",
+        );
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadAll();
-  }, [userId]);
+  }, [userId, API_URL, isBn]);
 
-  // ---------- Current history ----------
+  const tabs = [
+    { title: { en: "Auto Deposit History", bn: "অটো ডিপোজিট ইতিহাস" } },
+    { title: { en: "Withdraw History", bn: "উত্তোলন ইতিহাস" } },
+    { title: { en: "Deposit History", bn: "ডিপোজিট ইতিহাস" } },
+  ];
+
   const currentHistory =
     activeMainTab === 0
-      ? depositHistory
+      ? autoDepositHistory
       : activeMainTab === 1
-      ? withdrawHistory
-      : autoDepositHistory;
+        ? withdrawHistory
+        : depositHistory;
 
   const getItemDateForFilter = (item) => {
-    // Auto deposit: paidAt preferred
     const dt =
-      activeMainTab === 2 ? (item.paidAt || item.createdAt) : item.createdAt;
-    return new Date(dt).toISOString().split("T")[0];
+      activeMainTab === 0 ? item.paidAt || item.createdAt : item.createdAt;
+    if (!dt) return "";
+    const d = new Date(dt);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toISOString().split("T")[0];
   };
 
   const filteredHistory = currentHistory.filter((item) => {
@@ -116,7 +150,6 @@ const TransactionHistory = () => {
     return getItemDateForFilter(item) === dateFilter;
   });
 
-  // Pagination
   const totalItems = filteredHistory.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
@@ -124,18 +157,6 @@ const TransactionHistory = () => {
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = filteredHistory.slice(indexOfFirstItem, indexOfLastItem);
 
-  const paginate = (pageNumber) => {
-    if (pageNumber >= 1 && pageNumber <= totalPages) setCurrentPage(pageNumber);
-  };
-
-  // Tabs
-  const tabs = [
-    { title: { en: "Deposit History", bn: "ডিপোজিট ইতিহাস" } },
-    { title: { en: "Withdraw History", bn: "উত্তোলন ইতিহাস" } },
-    { title: { en: "Auto Deposit History", bn: "অটো ডিপোজিট ইতিহাস" } }, // ✅ NEW
-  ];
-
-  // Headers
   const tableHeadersManual = [
     { en: "Date & Time", bn: "তারিখ ও সময়" },
     { en: "Method", bn: "পদ্ধতি" },
@@ -154,54 +175,104 @@ const TransactionHistory = () => {
     { en: "Footprint", bn: "ফুটপ্রিন্ট" },
   ];
 
-  const formatDateTime = (date) => new Date(date).toLocaleString();
+  const formatDateTime = (date) => {
+    if (!date) return "-";
+    const d = new Date(date);
+    if (Number.isNaN(d.getTime())) return "-";
+    return d.toLocaleString();
+  };
+
+  const money = (value) => {
+    const n = Number(value || 0);
+    return n.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
 
   const getStatusColor = (status) => {
     const s = String(status || "").toLowerCase();
-    if (s === "completed" || s === "paid") return "text-green-600 bg-green-100";
+
+    if (s === "completed" || s === "paid" || s === "success") {
+      return "text-green-600 bg-green-100";
+    }
+
     if (s === "pending") return "text-yellow-600 bg-yellow-100";
+
     return "text-red-600 bg-red-100";
   };
 
   const getManualTransactionInfo = (item) => {
-    if (activeMainTab === 0) {
+    if (activeMainTab === 2) {
       const txn = item.userInputs?.find(
         (i) =>
           i.name?.toLowerCase().includes("transaction") ||
-          i.label?.toLowerCase().includes("transaction")
+          i.label?.toLowerCase().includes("transaction"),
       );
+
       const agentWallet = item.paymentMethod?.agentWalletNumber;
+
       return `${txn?.value || "-"} ${agentWallet ? `/ ${agentWallet}` : ""}`;
-    } else {
-      const number = item.userInputs?.find((i) => i.type === "number");
-      return number?.value ? `------------- / ${number.value}` : "-";
+    }
+
+    const number = item.userInputs?.find((i) => i.type === "number");
+    return number?.value ? `------------- / ${number.value}` : "-";
+  };
+
+  const getManualStatusLabel = (status) => {
+    const s = String(status || "").toLowerCase();
+
+    if (s === "completed" || s === "success") {
+      return isBn ? "সফল" : "Success";
+    }
+
+    if (s === "pending") return isBn ? "পেন্ডিং" : "Pending";
+
+    return isBn ? "বাতিল" : "Rejected";
+  };
+
+  const getAutoStatusLabel = (status) => {
+    const s = String(status || "").toUpperCase();
+
+    if (s === "PAID" || s === "COMPLETED" || s === "SUCCESS") {
+      return isBn ? "সফল" : "Paid";
+    }
+
+    if (s === "PENDING") return isBn ? "পেন্ডিং" : "Pending";
+
+    return isBn ? "ব্যর্থ" : "Failed";
+  };
+
+  const paginate = (pageNumber) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+      setCurrentPage(pageNumber);
     }
   };
 
+  const handleTabChange = (index) => {
+    setActiveMainTab(index);
+    setCurrentPage(1);
+    setDateFilter("");
+  };
+
   return (
-    <div className="p-4 space-y-6 bg-gray-50 min-h-screen md:min-h-0 overflow-y-auto h-[500px] [scrollbar-width:none]">
-      {/* Tabs */}
+    <div className="p-4 space-y-6 bg-gray-50 min-h-screen md:min-h-0 overflow-y-auto max-h-[calc(100vh-320px)] pb-28 lg:pb-6 [scrollbar-width:none]">
       <div className="flex gap-8 overflow-x-auto border-b pb-3 bg-[#063A49] text-white rounded-t-lg">
         {tabs.map((tab, i) => (
           <button
             key={i}
-            onClick={() => {
-              setActiveMainTab(i);
-              setCurrentPage(1);
-              setDateFilter("");
-            }}
+            onClick={() => handleTabChange(i)}
             className={`pb-3 px-4 font-medium whitespace-nowrap transition-colors ${
               i === activeMainTab
                 ? "border-b-4 border-blue-500 text-white"
                 : "text-yellow-300 hover:text-white"
             }`}
           >
-            {language === "bn" ? tab.title.bn : tab.title.en}
+            {isBn ? tab.title.bn : tab.title.en}
           </button>
         ))}
       </div>
 
-      {/* Filter */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <input
           type="date"
@@ -212,26 +283,28 @@ const TransactionHistory = () => {
           }}
           className="px-4 py-2 border border-gray-400 rounded-lg focus:outline-none focus:border-blue-600"
         />
-        <button className="px-6 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition">
-          {language === "bn" ? "খুঁজুন" : "Search"}
+
+        <button
+          onClick={() => setCurrentPage(1)}
+          className="px-6 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition"
+        >
+          {isBn ? "খুঁজুন" : "Search"}
         </button>
       </div>
 
-      {/* Content */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-4 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <p className="font-medium">
-            {language === "bn"
+          <p className="font-medium text-gray-700">
+            {isBn
               ? `মোট: ${filteredHistory.length} টি`
               : `Total: ${filteredHistory.length} records`}
           </p>
-          {totalPages > 1 && (
-            <p className="text-sm text-gray-600">
-              {language === "bn"
-                ? `পেজ ${currentPage} / ${totalPages}`
-                : `Page ${currentPage} of ${totalPages}`}
-            </p>
-          )}
+
+          <p className="text-sm text-gray-600">
+            {isBn
+              ? `পেজ ${currentPage} / ${totalPages || 1}`
+              : `Page ${currentPage} of ${totalPages || 1}`}
+          </p>
         </div>
 
         {loading ? (
@@ -242,110 +315,104 @@ const TransactionHistory = () => {
           <div className="p-12 text-center text-red-600">{error}</div>
         ) : filteredHistory.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
-            {language === "bn"
-              ? "কোন লেনদেন পাওয়া যায়নি"
-              : "No transactions found"}
+            {isBn ? "কোন লেনদেন পাওয়া যায়নি" : "No transactions found"}
           </div>
         ) : (
           <>
-            {/* Desktop Table */}
             <div className="hidden lg:block overflow-x-auto">
               <table className="w-full min-w-max">
                 <thead className="bg-[#063A49] text-white">
                   <tr>
-                    {(activeMainTab === 2 ? tableHeadersAuto : tableHeadersManual).map(
-                      (h, i) => (
-                        <th key={i} className="text-left p-4 text-sm font-medium">
-                          {language === "bn" ? h.bn : h.en}
-                        </th>
-                      )
-                    )}
+                    {(activeMainTab === 0
+                      ? tableHeadersAuto
+                      : tableHeadersManual
+                    ).map((h, i) => (
+                      <th key={i} className="text-left p-4 text-sm font-medium">
+                        {isBn ? h.bn : h.en}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
 
                 <tbody>
                   {currentItems.map((item, i) => {
-                    if (activeMainTab !== 2) {
-                      // Manual deposit/withdraw row
+                    if (activeMainTab === 0) {
+                      const dt = item.paidAt || item.createdAt;
+                      const st = String(item.status || "");
+                      const footprint = item.footprint || "";
+
                       return (
                         <tr key={i} className="border-b hover:bg-gray-50">
-                          <td className="p-4 text-sm">{formatDateTime(item.createdAt)}</td>
-                          <td className="p-4 text-sm">
-                            {item.paymentMethod?.methodNameBD ||
-                              item.paymentMethod?.methodName ||
-                              "-"}
-                          </td>
+                          <td className="p-4 text-sm">{formatDateTime(dt)}</td>
+
                           <td className="p-4 text-sm font-medium">
-                            {item.amount?.toFixed(2) || "-"}
+                            ৳{money(item.amount)}
                           </td>
-                          <td className="p-4 text-sm">{getManualTransactionInfo(item)}</td>
+
+                          <td className="p-4 text-sm">
+                            {item.invoiceNumber || "-"}
+                          </td>
+
+                          <td className="p-4 text-sm">
+                            {item.transactionId || "-"}
+                          </td>
+
+                          <td className="p-4 text-sm">{item.bank || "-"}</td>
+
                           <td className="p-4">
                             <span
                               className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                item.status
+                                st,
                               )}`}
                             >
-                              {item.status === "completed"
-                                ? language === "bn"
-                                  ? "সফল"
-                                  : "Success"
-                                : item.status === "pending"
-                                ? language === "bn"
-                                  ? "পেন্ডিং"
-                                  : "Pending"
-                                : language === "bn"
-                                ? "বাতিল"
-                                : "Rejected"}
+                              {getAutoStatusLabel(st)}
                             </span>
+                          </td>
+
+                          <td className="p-4">
+                            {footprint ? (
+                              <button
+                                onClick={() => window.open(footprint, "_blank")}
+                                className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                              >
+                                {isBn ? "দেখুন" : "View"}
+                              </button>
+                            ) : (
+                              "-"
+                            )}
                           </td>
                         </tr>
                       );
                     }
 
-                    // ✅ Auto deposit row
-                    const dt = item.paidAt || item.createdAt;
-                    const st = String(item.status || "");
-                    const footprint = item.footprint || "";
-
                     return (
                       <tr key={i} className="border-b hover:bg-gray-50">
-                        <td className="p-4 text-sm">{formatDateTime(dt)}</td>
-                        <td className="p-4 text-sm font-medium">
-                          {Number(item.amount || 0).toFixed(2)}
+                        <td className="p-4 text-sm">
+                          {formatDateTime(item.createdAt)}
                         </td>
-                        <td className="p-4 text-sm">{item.invoiceNumber || "-"}</td>
-                        <td className="p-4 text-sm">{item.transactionId || "-"}</td>
-                        <td className="p-4 text-sm">{item.bank || "-"}</td>
+
+                        <td className="p-4 text-sm">
+                          {item.paymentMethod?.methodNameBD ||
+                            item.paymentMethod?.methodName ||
+                            "-"}
+                        </td>
+
+                        <td className="p-4 text-sm font-medium">
+                          ৳{money(item.amount)}
+                        </td>
+
+                        <td className="p-4 text-sm break-all">
+                          {getManualTransactionInfo(item)}
+                        </td>
+
                         <td className="p-4">
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              st
+                              item.status,
                             )}`}
                           >
-                            {st === "PAID"
-                              ? language === "bn"
-                                ? "সফল"
-                                : "Paid"
-                              : st === "PENDING"
-                              ? language === "bn"
-                                ? "পেন্ডিং"
-                                : "Pending"
-                              : language === "bn"
-                              ? "ব্যর্থ"
-                              : "Failed"}
+                            {getManualStatusLabel(item.status)}
                           </span>
-                        </td>
-                        <td className="p-4">
-                          {footprint ? (
-                            <button
-                              onClick={() => window.open(footprint, "_blank")}
-                              className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                            >
-                              {language === "bn" ? "দেখুন" : "View"}
-                            </button>
-                          ) : (
-                            "-"
-                          )}
                         </td>
                       </tr>
                     );
@@ -354,158 +421,147 @@ const TransactionHistory = () => {
               </table>
             </div>
 
-            {/* Mobile Cards */}
             <div className="lg:hidden space-y-4 p-4">
               {currentItems.map((item, i) => {
-                if (activeMainTab !== 2) {
-                  // Manual card
+                if (activeMainTab === 0) {
+                  const dt = item.paidAt || item.createdAt;
+                  const st = String(item.status || "");
+                  const footprint = item.footprint || "";
+
                   return (
-                    <div key={i} className="border rounded-lg p-4 bg-white shadow-sm">
-                      <div className="space-y-3 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">
-                            {language === "bn" ? "তারিখ ও সময়" : "Date & Time"}
-                          </span>
-                          <span className="font-medium">{formatDateTime(item.createdAt)}</span>
+                    <div
+                      key={i}
+                      className="border rounded-lg p-4 bg-white shadow-sm"
+                    >
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs">
+                            {isBn ? "তারিখ ও সময়" : "Date & Time"}
+                          </p>
+                          <p className="font-medium">{formatDateTime(dt)}</p>
                         </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">
-                            {language === "bn" ? "পদ্ধতি" : "Method"}
-                          </span>
-                          <span>
-                            {item.paymentMethod?.methodNameBD ||
-                              item.paymentMethod?.methodName ||
-                              "-"}
-                          </span>
+                        <div>
+                          <p className="text-gray-500 text-xs">
+                            {isBn ? "পরিমাণ" : "Amount"}
+                          </p>
+                          <p className="font-medium">৳{money(item.amount)}</p>
                         </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">
-                            {language === "bn" ? "পরিমাণ" : "Amount"}
-                          </span>
-                          <span className="font-bold text-lg">
-                            {item.amount?.toFixed(2)}
-                          </span>
+                        <div>
+                          <p className="text-gray-500 text-xs">
+                            {isBn ? "ইনভয়েস" : "Invoice"}
+                          </p>
+                          <p className="font-medium break-all">
+                            {item.invoiceNumber || "-"}
+                          </p>
                         </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">
-                            {language === "bn" ? "ট্রানজেকশন" : "Transaction"}
-                          </span>
-                          <span>{getManualTransactionInfo(item)}</span>
+                        <div>
+                          <p className="text-gray-500 text-xs">
+                            {isBn ? "ট্রানজেকশন আইডি" : "Trx ID"}
+                          </p>
+                          <p className="font-medium break-all">
+                            {item.transactionId || "-"}
+                          </p>
                         </div>
 
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">
-                            {language === "bn" ? "স্ট্যাটাস" : "Status"}
-                          </span>
+                        <div>
+                          <p className="text-gray-500 text-xs">
+                            {isBn ? "ব্যাংক" : "Bank"}
+                          </p>
+                          <p className="font-medium">{item.bank || "-"}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-gray-500 text-xs">
+                            {isBn ? "স্ট্যাটাস" : "Status"}
+                          </p>
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              item.status
+                            className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                              st,
                             )}`}
                           >
-                            {item.status === "completed"
-                              ? language === "bn"
-                                ? "সফল"
-                                : "Success"
-                              : item.status === "pending"
-                              ? language === "bn"
-                                ? "পেন্ডিং"
-                                : "Pending"
-                              : language === "bn"
-                              ? "বাতিল"
-                              : "Rejected"}
+                            {getAutoStatusLabel(st)}
                           </span>
+                        </div>
+
+                        <div>
+                          <p className="text-gray-500 text-xs">
+                            {isBn ? "ফুটপ্রিন্ট" : "Footprint"}
+                          </p>
+
+                          {footprint ? (
+                            <button
+                              onClick={() => window.open(footprint, "_blank")}
+                              className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                            >
+                              {isBn ? "দেখুন" : "View"}
+                            </button>
+                          ) : (
+                            <p className="font-medium">-</p>
+                          )}
                         </div>
                       </div>
                     </div>
                   );
                 }
 
-                // ✅ Auto deposit card
-                const dt = item.paidAt || item.createdAt;
-                const st = String(item.status || "");
-                const footprint = item.footprint || "";
-
                 return (
-                  <div key={i} className="border rounded-lg p-4 bg-white shadow-sm">
-                    <div className="space-y-3 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">
-                          {language === "bn" ? "তারিখ ও সময়" : "Date & Time"}
-                        </span>
-                        <span className="font-medium">{formatDateTime(dt)}</span>
+                  <div
+                    key={i}
+                    className="border rounded-lg p-4 bg-white shadow-sm"
+                  >
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-500 text-xs">
+                          {isBn ? "তারিখ ও সময়" : "Date & Time"}
+                        </p>
+                        <p className="font-medium">
+                          {formatDateTime(item.createdAt)}
+                        </p>
                       </div>
 
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">
-                          {language === "bn" ? "পরিমাণ" : "Amount"}
-                        </span>
-                        <span className="font-bold text-lg">
-                          {Number(item.amount || 0).toFixed(2)}
-                        </span>
+                      <div>
+                        <p className="text-gray-500 text-xs">
+                          {isBn ? "পদ্ধতি" : "Method"}
+                        </p>
+                        <p className="font-medium">
+                          {item.paymentMethod?.methodNameBD ||
+                            item.paymentMethod?.methodName ||
+                            "-"}
+                        </p>
                       </div>
 
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">
-                          {language === "bn" ? "ইনভয়েস" : "Invoice"}
-                        </span>
-                        <span className="font-medium">{item.invoiceNumber || "-"}</span>
+                      <div>
+                        <p className="text-gray-500 text-xs">
+                          {isBn ? "পরিমাণ" : "Amount"}
+                        </p>
+                        <p className="font-medium">৳{money(item.amount)}</p>
                       </div>
 
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">
-                          {language === "bn" ? "Trx ID" : "Trx ID"}
-                        </span>
-                        <span>{item.transactionId || "-"}</span>
+                      <div>
+                        <p className="text-gray-500 text-xs">
+                          {isBn
+                            ? "ট্রানজেকশন আইডি / নম্বর"
+                            : "Transaction ID / Number"}
+                        </p>
+                        <p className="font-medium break-all">
+                          {getManualTransactionInfo(item)}
+                        </p>
                       </div>
 
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">
-                          {language === "bn" ? "ব্যাংক" : "Bank"}
-                        </span>
-                        <span>{item.bank || "-"}</span>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600">
-                          {language === "bn" ? "স্ট্যাটাস" : "Status"}
-                        </span>
+                      <div>
+                        <p className="text-gray-500 text-xs">
+                          {isBn ? "স্ট্যাটাস" : "Status"}
+                        </p>
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            st
+                          className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                            item.status,
                           )}`}
                         >
-                          {st === "PAID"
-                            ? language === "bn"
-                              ? "সফল"
-                              : "Paid"
-                            : st === "PENDING"
-                            ? language === "bn"
-                              ? "পেন্ডিং"
-                              : "Pending"
-                            : language === "bn"
-                            ? "ব্যর্থ"
-                            : "Failed"}
+                          {getManualStatusLabel(item.status)}
                         </span>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600">
-                          {language === "bn" ? "ফুটপ্রিন্ট" : "Footprint"}
-                        </span>
-
-                        {footprint ? (
-                          <button
-                            onClick={() => window.open(footprint, "_blank")}
-                            className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-                          >
-                            {language === "bn" ? "দেখুন" : "View"}
-                          </button>
-                        ) : (
-                          <span>-</span>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -513,39 +569,40 @@ const TransactionHistory = () => {
               })}
             </div>
 
-            {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t bg-gray-50">
-                <p className="text-sm text-gray-600">
-                  {language === "bn"
-                    ? `দেখানো হচ্ছে ${indexOfFirstItem + 1} - ${
-                        indexOfLastItem > totalItems ? totalItems : indexOfLastItem
-                      } এর মধ্যে ${totalItems}`
-                    : `Showing ${indexOfFirstItem + 1} - ${
-                        indexOfLastItem > totalItems ? totalItems : indexOfLastItem
-                      } of ${totalItems}`}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t pb-8 lg:pb-4">
+                <p className="text-sm text-gray-600 text-center sm:text-left">
+                  {isBn
+                    ? `দেখানো হচ্ছে ${indexOfFirstItem + 1} - ${Math.min(
+                        indexOfLastItem,
+                        totalItems,
+                      )} এর মধ্যে ${totalItems}`
+                    : `Showing ${indexOfFirstItem + 1} - ${Math.min(
+                        indexOfLastItem,
+                        totalItems,
+                      )} of ${totalItems}`}
                 </p>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-center">
                   <button
                     onClick={() => paginate(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition text-sm"
+                    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition"
                   >
-                    {language === "bn" ? "আগে" : "Prev"}
+                    {isBn ? "আগে" : "Prev"}
                   </button>
 
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap justify-center">
                     {Array.from({ length: totalPages }, (_, i) => i + 1)
                       .slice(
                         Math.max(0, currentPage - 3),
-                        Math.min(totalPages, currentPage + 2)
+                        Math.min(totalPages, currentPage + 2),
                       )
                       .map((page) => (
                         <button
                           key={page}
                           onClick={() => paginate(page)}
-                          className={`px-3 py-1.5 rounded text-sm font-medium min-w-[32px] ${
+                          className={`px-3 py-2 rounded text-sm font-medium ${
                             currentPage === page
                               ? "bg-blue-600 text-white"
                               : "bg-gray-100 hover:bg-gray-200"
@@ -559,9 +616,9 @@ const TransactionHistory = () => {
                   <button
                     onClick={() => paginate(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition text-sm"
+                    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition"
                   >
-                    {language === "bn" ? "পরে" : "Next"}
+                    {isBn ? "পরে" : "Next"}
                   </button>
                 </div>
               </div>

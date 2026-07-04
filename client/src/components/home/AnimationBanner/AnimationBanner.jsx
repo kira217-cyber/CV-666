@@ -329,9 +329,9 @@ export default function AnimationBanner() {
                   src={getGameImage(game)}
                   alt={getGameName(game)}
                   className="w-full h-full object-cover rounded-lg transition-transform duration-500 group-hover:scale-110 group-hover:blur-[2px]"
-                  onError={(e) => {
-                    e.currentTarget.src = "/placeholder-game.png";
-                  }}
+                  // onError={(e) => {
+                  //   e.currentTarget.src = "/placeholder-game.png";
+                  // }}
                 />
 
                 {game.showHeart && (
