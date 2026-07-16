@@ -3,8 +3,9 @@ import { AuthContext } from "@/Context/AuthContext";
 import Modal from "@/components/home/modal/Modal";
 import Login from "@/components/shared/login/Login";
 import RegistrationModal from "@/components/shared/login/RegistrationModal";
+
 import axios from "axios";
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const API =
@@ -12,11 +13,15 @@ const API =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5002";
 
-const GAMES_PER_PAGE = 30;
+const GAMES_PER_PAGE = 50;
 
 const getUploadImage = (path = "") => {
   if (!path) return "/placeholder-game.png";
-  if (/^https?:\/\//i.test(path)) return path;
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
@@ -27,7 +32,44 @@ const getGameImage = (game) => {
   if (game?.gameImage) return game.gameImage;
   if (game?.image) return getUploadImage(game.image);
   if (game?.oracle?.image) return game.oracle.image;
+
   return "/placeholder-game.png";
+};
+
+const extractGames = (responseData) => {
+  if (Array.isArray(responseData?.data)) {
+    return responseData.data;
+  }
+
+  if (Array.isArray(responseData?.data?.games)) {
+    return responseData.data.games;
+  }
+
+  return [];
+};
+
+const extractMeta = (responseData) => {
+  const meta = responseData?.data?.meta;
+
+  if (!meta || typeof meta !== "object") {
+    return {
+      page: 1,
+      limit: GAMES_PER_PAGE,
+      total: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    };
+  }
+
+  return {
+    page: Number(meta.page) || 1,
+    limit: Number(meta.limit) || GAMES_PER_PAGE,
+    total: Number(meta.total) || 0,
+    totalPages: Math.max(Number(meta.totalPages) || 1, 1),
+    hasNextPage: Boolean(meta.hasNextPage),
+    hasPreviousPage: Boolean(meta.hasPreviousPage),
+  };
 };
 
 const HotGames = () => {
@@ -38,57 +80,119 @@ const HotGames = () => {
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const [paginationMeta, setPaginationMeta] = useState({
+    page: 1,
+    limit: GAMES_PER_PAGE,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
+
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
 
-  const fetchHotGames = async () => {
-    try {
-      setLoading(true);
-
-      const { data } = await axios.get(`${API}/api/public-games`, {
-        params: {
-          status: "active",
-          isHot: true,
-        },
-      });
-
-      const docs = Array.isArray(data?.data)
-        ? data.data
-        : data?.data?.games || [];
-
-      setGames(docs);
-    } catch {
-      setGames([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchHotGames = async () => {
+      try {
+        setLoading(true);
+
+        const { data } = await axios.get(`${API}/api/public-games`, {
+          params: {
+            status: "active",
+            isHot: true,
+            page: currentPage,
+            limit: GAMES_PER_PAGE,
+          },
+          signal: controller.signal,
+        });
+
+        const docs = extractGames(data);
+        const meta = extractMeta(data);
+
+        if (!controller.signal.aborted) {
+          setGames(docs);
+          setPaginationMeta(meta);
+        }
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+          return;
+        }
+
+        setGames([]);
+
+        setPaginationMeta({
+          page: currentPage,
+          limit: GAMES_PER_PAGE,
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: currentPage > 1,
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
     fetchHotGames();
-  }, []);
 
-  const totalPages = Math.ceil(games.length / GAMES_PER_PAGE) || 1;
-  const startIndex = (currentPage - 1) * GAMES_PER_PAGE;
-  const paginatedGames = games.slice(startIndex, startIndex + GAMES_PER_PAGE);
+    return () => {
+      controller.abort();
+    };
+  }, [currentPage]);
 
-  const handlePlayClick = (game) => {
-    if (!game) return;
+  const totalPages = paginationMeta.totalPages || 1;
 
-    if (!user) {
-      setShowRegisterModal(false);
-      setShowLoginModal(true);
-      return;
+  const visiblePages = useMemo(() => {
+    const pages = [];
+
+    for (let page = 1; page <= totalPages; page += 1) {
+      if (
+        page === 1 ||
+        page === totalPages ||
+        Math.abs(page - currentPage) <= 1
+      ) {
+        pages.push(page);
+      }
     }
 
-    navigate(`/liveGame/${game.gameId}`);
-  };
+    return pages;
+  }, [currentPage, totalPages]);
 
-  const goToPage = (page) => {
-    if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const handlePlayClick = useCallback(
+    (game) => {
+      if (!game) return;
+
+      if (!user) {
+        setShowRegisterModal(false);
+        setShowLoginModal(true);
+        return;
+      }
+
+      navigate(`/liveGame/${game.gameId}`);
+    },
+    [navigate, user],
+  );
+
+  const goToPage = useCallback(
+    (page) => {
+      if (page < 1 || page > totalPages || page === currentPage || loading) {
+        return;
+      }
+
+      setCurrentPage(page);
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    },
+    [currentPage, loading, totalPages],
+  );
 
   return (
     <div className="min-h-screen pb-20">
@@ -101,7 +205,8 @@ const HotGames = () => {
           </h1>
 
           {/* <div className="text-xs font-bold text-[#e0fff7]/80">
-            {games.length} {language === "bn" ? "গেম" : "Games"}
+            {paginationMeta.total}{" "}
+            {language === "bn" ? "গেম" : "Games"}
           </div> */}
         </div>
 
@@ -114,7 +219,7 @@ const HotGames = () => {
               />
             ))}
           </div>
-        ) : paginatedGames.length === 0 ? (
+        ) : games.length === 0 ? (
           <div className="rounded-xl border border-[#006165] bg-[#003840] py-10 text-center text-[#e0fff7]">
             {language === "bn"
               ? "কোনো হট গেম পাওয়া যায়নি"
@@ -123,9 +228,9 @@ const HotGames = () => {
         ) : (
           <>
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
-              {paginatedGames.map((game, index) => (
+              {games.map((game, index) => (
                 <div
-                  key={game._id || game.gameId || index}
+                  key={game?._id || game?.gameId || index}
                   onClick={() => handlePlayClick(game)}
                   className="relative group overflow-hidden rounded-xl shadow-2xl cursor-pointer transition-all duration-500 hover:scale-105"
                   style={{
@@ -138,10 +243,13 @@ const HotGames = () => {
                   <img
                     src={getGameImage(game)}
                     alt={getGameName(game)}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover rounded-xl border-2 border-white"
-                    // onError={(e) => {
-                    //   e.currentTarget.src = "/placeholder-game.png";
-                    // }}
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = "/placeholder-game.png";
+                    }}
                   />
 
                   <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700 px-1 uppercase">
@@ -167,33 +275,45 @@ const HotGames = () => {
             {totalPages > 1 && (
               <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                 <button
-                  disabled={currentPage === 1}
+                  type="button"
+                  disabled={currentPage === 1 || loading}
                   onClick={() => goToPage(currentPage - 1)}
                   className="px-3 py-1.5 rounded-lg text-sm font-bold bg-[#003840] text-[#e0fff7] border border-[#006165] hover:bg-[#0a6670] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
                 >
                   {language === "bn" ? "আগে" : "Prev"}
                 </button>
 
-                {Array.from({ length: totalPages }).map((_, idx) => {
-                  const page = idx + 1;
+                {visiblePages.map((page, index) => {
+                  const previousPage = visiblePages[index - 1];
+                  const showEllipsis = previousPage && page - previousPage > 1;
 
                   return (
-                    <button
-                      key={page}
-                      onClick={() => goToPage(page)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold border cursor-pointer ${
-                        page === currentPage
-                          ? "bg-[#ffe600] text-black border-[#fff2a6]"
-                          : "bg-[#003840] text-[#e0fff7] border-[#006165] hover:bg-[#0a6670]"
-                      }`}
-                    >
-                      {page}
-                    </button>
+                    <div key={page} className="flex items-center gap-2">
+                      {showEllipsis && (
+                        <span className="px-2 text-[#e0fff7]/70 font-bold">
+                          ...
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => goToPage(page)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold border cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
+                          page === currentPage
+                            ? "bg-[#ffe600] text-black border-[#fff2a6]"
+                            : "bg-[#003840] text-[#e0fff7] border-[#006165] hover:bg-[#0a6670]"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    </div>
                   );
                 })}
 
                 <button
-                  disabled={currentPage === totalPages}
+                  type="button"
+                  disabled={currentPage === totalPages || loading}
                   onClick={() => goToPage(currentPage + 1)}
                   className="px-3 py-1.5 rounded-lg text-sm font-bold bg-[#003840] text-[#e0fff7] border border-[#006165] hover:bg-[#0a6670] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
                 >

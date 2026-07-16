@@ -4,7 +4,16 @@ import { Navigation, Grid } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/grid";
-import { useContext, useEffect, useRef, useState } from "react";
+
+import {
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -13,11 +22,20 @@ import Login from "@/components/shared/login/Login";
 import RegistrationModal from "@/components/shared/login/RegistrationModal";
 import { AuthContext } from "@/Context/AuthContext";
 
-const API = import.meta.env.VITE_API_URL;
+const API =
+  import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5002";
+
+const GAMES_PER_CATEGORY = 50;
 
 const getUploadImage = (path = "") => {
   if (!path) return "/placeholder-game.png";
-  if (/^https?:\/\//i.test(path)) return path;
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
@@ -28,22 +46,93 @@ const getGameImage = (game) => {
   if (game?.gameImage) return game.gameImage;
   if (game?.image) return getUploadImage(game.image);
   if (game?.oracle?.image) return game.oracle.image;
+
   return "/placeholder-game.png";
 };
 
-const GameSection = ({ category, games, onPlay }) => {
+const extractGames = (responseData) => {
+  if (Array.isArray(responseData?.data)) {
+    return responseData.data;
+  }
+
+  if (Array.isArray(responseData?.data?.games)) {
+    return responseData.data.games;
+  }
+
+  return [];
+};
+
+const GameSection = memo(function GameSection({ category, games, onPlay }) {
   const swiperRef = useRef(null);
+  const sectionRef = useRef(null);
+
   const { language } = useContext(AuthContext);
 
-  const title =
-    language === "bn"
-      ? category?.categoryName?.bn || category?.categoryName?.en
-      : category?.categoryName?.en || category?.categoryName?.bn;
+  const title = useMemo(() => {
+    if (language === "bn") {
+      return (
+        category?.categoryName?.bn || category?.categoryName?.en || "Games"
+      );
+    }
+
+    return category?.categoryName?.en || category?.categoryName?.bn || "Games";
+  }, [category, language]);
+
+  useEffect(() => {
+    if (!games?.length || !sectionRef.current) {
+      return undefined;
+    }
+
+    let timeoutId = null;
+    let animationFrameId = null;
+
+    const triggerShine = () => {
+      if (!sectionRef.current) return;
+
+      const cards = sectionRef.current.querySelectorAll(".category-auto-shine");
+
+      cards.forEach((card) => {
+        if (!(card instanceof HTMLElement)) return;
+
+        card.classList.remove("category-shine-animate");
+
+        void card.offsetWidth;
+
+        card.classList.add("category-shine-animate");
+      });
+
+      timeoutId = window.setTimeout(() => {
+        if (document.hidden) {
+          timeoutId = window.setTimeout(triggerShine, 3000);
+          return;
+        }
+
+        animationFrameId = window.requestAnimationFrame(triggerShine);
+      }, 3000);
+    };
+
+    const startDelay = window.setTimeout(triggerShine, 1000);
+
+    return () => {
+      window.clearTimeout(startDelay);
+
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [games?.length]);
 
   if (!games?.length) return null;
 
   return (
-    <div className="max-w-5xl mx-auto mb-8 game-card-container relative">
+    <div
+      ref={sectionRef}
+      className="max-w-5xl mx-auto mb-8 game-card-container relative"
+    >
       <div className="flex justify-between items-center mb-4 lg:mb-3 mt-4">
         <h2 className="text-base sm:text-lg lg:text-xl font-bold text-[#10f3c8] uppercase">
           {title}
@@ -77,24 +166,48 @@ const GameSection = ({ category, games, onPlay }) => {
 
       <Swiper
         modules={[Navigation, Grid]}
-        onSwiper={(swiper) => (swiperRef.current = swiper)}
+        onSwiper={(swiper) => {
+          swiperRef.current = swiper;
+        }}
         observer
         observeParents
         spaceBetween={8}
-        grid={{ rows: 2, fill: "row" }}
+        grid={{
+          rows: 2,
+          fill: "row",
+        }}
         slidesPerView={5}
         breakpoints={{
-          0: { slidesPerView: 3, spaceBetween: 8 },
-          480: { slidesPerView: 3.5, spaceBetween: 10 },
-          768: { slidesPerView: 4.5, spaceBetween: 12 },
-          1024: { slidesPerView: 5.3, spaceBetween: 14 },
-          1440: { slidesPerView: 5.3, spaceBetween: 16 },
+          0: {
+            slidesPerView: 3,
+            spaceBetween: 8,
+          },
+          480: {
+            slidesPerView: 3.5,
+            spaceBetween: 10,
+          },
+          768: {
+            slidesPerView: 4.5,
+            spaceBetween: 12,
+          },
+          1024: {
+            slidesPerView: 5.3,
+            spaceBetween: 14,
+          },
+          1440: {
+            slidesPerView: 5.3,
+            spaceBetween: 16,
+          },
         }}
         className="swiper-container"
-        style={{ padding: "0 5px" }}
+        style={{
+          padding: "0 5px",
+        }}
       >
         {games.map((game, index) => (
-          <SwiperSlide key={game._id || game.gameId || index}>
+          <SwiperSlide
+            key={game?._id || game?.gameId || `${category?._id}-${index}`}
+          >
             <div
               className="relative group overflow-hidden rounded-xl shadow-2xl cursor-pointer transition-all duration-500 hover:scale-105 category-auto-shine"
               style={{
@@ -105,14 +218,17 @@ const GameSection = ({ category, games, onPlay }) => {
               }}
               onClick={() => onPlay(game)}
             >
-              <div className="category-shine-layer"></div>
+              <div className="category-shine-layer" />
 
               <img
                 src={getGameImage(game)}
                 alt={getGameName(game)}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover rounded-xl border-2 border-white"
-                // onError={(e) => {
-                //   e.currentTarget.src = "/placeholder-game.png";
+                // onError={(event) => {
+                //   event.currentTarget.onerror = null;
+                //   event.currentTarget.src = "/placeholder-game.png";
                 // }}
               />
 
@@ -138,133 +254,159 @@ const GameSection = ({ category, games, onPlay }) => {
       </Swiper>
     </div>
   );
-};
+});
 
 const CategoryGames = () => {
   const navigate = useNavigate();
+
   const { user, language } = useContext(AuthContext);
 
   const [sections, setSections] = useState([]);
   const [selectedGame, setSelectedGame] = useState(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+
   const [showLoginModal, setShowLoginModal] = useState(false);
+
   const [showRegisterModal, setShowRegisterModal] = useState(false);
 
-  const fetchCategoryGames = async () => {
-    try {
-      const { data } = await axios.get(
-        `${API}/api/public-games/categories/active`,
-      );
-
-      const activeCategories = [...(data?.data || [])].sort((a, b) => {
-        const orderA = Number(a?.order ?? 0);
-        const orderB = Number(b?.order ?? 0);
-
-        if (orderA !== orderB) return orderA - orderB;
-
-        return new Date(a?.createdAt || 0) - new Date(b?.createdAt || 0);
-      });
-
-      const result = await Promise.all(
-        activeCategories.map(async (category) => {
-          try {
-            const gameRes = await axios.get(`${API}/api/public-games`, {
-              params: {
-                status: "active",
-                categoryId: category._id,
-                isHome: true,
-              },
-            });
-
-            const games = [...(gameRes?.data?.data || [])].sort((a, b) => {
-              return new Date(a?.createdAt || 0) - new Date(b?.createdAt || 0);
-            });
-
-            return {
-              category,
-              games,
-            };
-          } catch {
-            return {
-              category,
-              games: [],
-            };
-          }
-        }),
-      );
-
-      setSections(result.filter((item) => item.games.length > 0));
-    } catch {
-      setSections([]);
-    }
-  };
-
   useEffect(() => {
-    fetchCategoryGames();
-  }, []);
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
 
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 767);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  const handlePlayClick = (game) => {
-    if (!game) return;
-
-    if (!user) {
-      setShowRegisterModal(false);
-      setShowLoginModal(true);
-      return;
-    }
-
-    navigate(`/liveGame/${game.gameId}`);
-    setSelectedGame(null);
-  };
-
-  const handleGameClick = (game) => {
-    if (isMobile) {
-      setSelectedGame(game);
-      return;
-    }
-
-    handlePlayClick(game);
-  };
-
-  useEffect(() => {
-    if (!sections.length) return;
-
-    let animationFrameId = null;
-    let timeoutId = null;
-
-    const triggerShine = () => {
-      const cards = document.querySelectorAll(".category-auto-shine");
-
-      cards.forEach((card) => {
-        if (card instanceof HTMLElement) {
-          card.classList.remove("category-shine-animate");
-          void card.offsetWidth;
-          card.classList.add("category-shine-animate");
-        }
-      });
-
-      timeoutId = setTimeout(() => {
-        if (!document.hidden) {
-          animationFrameId = requestAnimationFrame(triggerShine);
-        } else {
-          timeoutId = setTimeout(triggerShine, 3000);
-        }
-      }, 3000);
+    const handleMediaChange = (event) => {
+      setIsMobile(event.matches);
     };
 
-    const startDelay = setTimeout(triggerShine, 1000);
+    setIsMobile(mediaQuery.matches);
+
+    mediaQuery.addEventListener("change", handleMediaChange);
 
     return () => {
-      clearTimeout(startDelay);
-      clearTimeout(timeoutId);
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      mediaQuery.removeEventListener("change", handleMediaChange);
     };
-  }, [sections.length]);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchCategoryGames = async () => {
+      try {
+        const { data } = await axios.get(
+          `${API}/api/public-games/categories/active`,
+          {
+            signal: controller.signal,
+          },
+        );
+
+        const activeCategories = Array.isArray(data?.data)
+          ? [...data.data].sort((a, b) => {
+              const orderA = Number(a?.order ?? 0);
+
+              const orderB = Number(b?.order ?? 0);
+
+              if (orderA !== orderB) {
+                return orderA - orderB;
+              }
+
+              return (
+                new Date(a?.createdAt || 0).getTime() -
+                new Date(b?.createdAt || 0).getTime()
+              );
+            })
+          : [];
+
+        if (!activeCategories.length) {
+          setSections([]);
+          return;
+        }
+
+        const result = await Promise.all(
+          activeCategories.map(async (category) => {
+            try {
+              const gameRes = await axios.get(`${API}/api/public-games`, {
+                params: {
+                  status: "active",
+                  categoryId: category._id,
+                  isHome: true,
+                  page: 1,
+                  limit: GAMES_PER_CATEGORY,
+                },
+                signal: controller.signal,
+              });
+
+              const games = extractGames(gameRes?.data);
+
+              return {
+                category,
+                games,
+              };
+            } catch (error) {
+              if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+                throw error;
+              }
+
+              return {
+                category,
+                games: [],
+              };
+            }
+          }),
+        );
+
+        if (!controller.signal.aborted) {
+          setSections(
+            result.filter(
+              (item) => Array.isArray(item.games) && item.games.length > 0,
+            ),
+          );
+        }
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+          return;
+        }
+
+        setSections([]);
+      }
+    };
+
+    fetchCategoryGames();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  const handlePlayClick = useCallback(
+    (game) => {
+      if (!game) return;
+
+      if (!user) {
+        setShowRegisterModal(false);
+        setShowLoginModal(true);
+        return;
+      }
+
+      navigate(`/liveGame/${game.gameId}`);
+      setSelectedGame(null);
+    },
+    [navigate, user],
+  );
+
+  const handleGameClick = useCallback(
+    (game) => {
+      if (isMobile) {
+        setSelectedGame(game);
+        return;
+      }
+
+      handlePlayClick(game);
+    },
+    [handlePlayClick, isMobile],
+  );
 
   if (!sections.length) return null;
 
@@ -295,9 +437,12 @@ const CategoryGames = () => {
                 src={getGameImage(selectedGame)}
                 className="w-24 h-24 object-cover rounded-xl shadow-lg border-2 border-[#00ffaa] -mt-12"
                 alt={getGameName(selectedGame)}
-                onError={(e) => {
-                  e.currentTarget.src = "/placeholder-game.png";
-                }}
+                loading="lazy"
+                decoding="async"
+                // onError={(event) => {
+                //   event.currentTarget.onerror = null;
+                //   event.currentTarget.src = "/placeholder-game.png";
+                // }}
               />
 
               <h3 className="text-lg font-bold text-gray-800 truncate">
@@ -348,7 +493,12 @@ const CategoryGames = () => {
         .category-shine-layer {
           position: absolute;
           inset: 0;
-          background: linear-gradient(110deg, transparent 30%, white 50%, transparent 70%);
+          background: linear-gradient(
+            110deg,
+            transparent 30%,
+            white 50%,
+            transparent 70%
+          );
           transform: translateX(-150%);
           pointer-events: none;
           border-radius: inherit;
@@ -362,6 +512,7 @@ const CategoryGames = () => {
           0% {
             transform: translateX(-150%) skewX(-15deg);
           }
+
           100% {
             transform: translateX(150%) skewX(-15deg);
           }

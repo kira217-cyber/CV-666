@@ -4,7 +4,16 @@ import { Navigation, Grid } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/grid";
-import { useEffect, useRef, useState, useContext, useMemo } from "react";
+
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -18,9 +27,15 @@ const API =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5002";
 
+const GAME_LIMIT = 50;
+
 const getUploadImage = (path = "") => {
   if (!path) return "/placeholder-game.png";
-  if (/^https?:\/\//i.test(path)) return path;
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
@@ -39,12 +54,29 @@ const FLAG_BY_TITLE = {
   "JACKPOT GAMES": "isJackpot",
 };
 
+const TRANSLATIONS = {
+  en: {
+    viewAll: "View All",
+    playGame: "Play Game",
+    hotGames: "Hot Games",
+    homeGames: "Home Games",
+    jackpot: "Jackpot",
+  },
+
+  bn: {
+    viewAll: "সব দেখুন",
+    playGame: "খেলুন",
+    hotGames: "গরম খেলা",
+    homeGames: "হোম গেমস",
+    jackpot: "জ্যাকপট",
+  },
+};
+
 const getGameName = (game) => {
   return (
     game?.gameName ||
     game?.oracle?.name ||
     game?.name ||
-    game?.gameName ||
     game?.title ||
     game?.gameId ||
     "Game"
@@ -55,85 +87,146 @@ const getGameImage = (game) => {
   if (game?.gameImage) return game.gameImage;
   if (game?.image) return getUploadImage(game.image);
   if (game?.oracle?.image) return game.oracle.image;
+
   return "/placeholder-game.png";
+};
+
+const extractGames = (responseData) => {
+  if (Array.isArray(responseData?.data)) {
+    return responseData.data;
+  }
+
+  if (Array.isArray(responseData?.data?.games)) {
+    return responseData.data.games;
+  }
+
+  return [];
 };
 
 const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
   const swiperRef = useRef(null);
+  const containerRef = useRef(null);
+
   const navigate = useNavigate();
+
   const { user, language } = useContext(AuthContext);
 
   const [showLoginModal, setShowLoginModal] = useState(false);
+
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+
   const [selectedGame, setSelectedGame] = useState(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+
   const [serverGames, setServerGames] = useState([]);
+
   const [categories, setCategories] = useState([]);
 
-  const t = {
-    en: {
-      viewAll: "View All",
-      playGame: "Play Game",
-      hotGames: "Hot Games",
-      homeGames: "Home Games",
-      jackpot: "Jackpot",
-    },
-    bn: {
-      viewAll: "সব দেখুন",
-      playGame: "খেলুন",
-      hotGames: "গরম খেলা",
-      homeGames: "হোম গেমস",
-      jackpot: "জ্যাকপট",
-    },
-  };
+  const normalizedTitle = useMemo(
+    () =>
+      String(title || "")
+        .toUpperCase()
+        .trim(),
+    [title],
+  );
 
-  const translate = (key) => t?.[language]?.[key] || t.en[key];
-
-  const normalizedTitle = String(title || "")
-    .toUpperCase()
-    .trim();
   const flagKey = FLAG_BY_TITLE[normalizedTitle];
 
-  const fetchCategories = async () => {
-    try {
-      const { data } = await axios.get(
-        `${API}/api/public-games/categories/active`,
-      );
-
-      setCategories(data?.data || []);
-    } catch {
-      setCategories([]);
-    }
-  };
+  const translate = useCallback(
+    (key) => {
+      return TRANSLATIONS?.[language]?.[key] || TRANSLATIONS.en[key];
+    },
+    [language],
+  );
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+
+    const handleChange = (event) => {
+      setIsMobile(event.matches);
+    };
+
+    setIsMobile(mediaQuery.matches);
+
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchCategories = async () => {
+      try {
+        const { data } = await axios.get(
+          `${API}/api/public-games/categories/active`,
+          {
+            signal: controller.signal,
+          },
+        );
+
+        if (!controller.signal.aborted) {
+          setCategories(Array.isArray(data?.data) ? data.data : []);
+        }
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+          return;
+        }
+
+        setCategories([]);
+      }
+    };
+
     fetchCategories();
+
+    return () => {
+      controller.abort();
+    };
   }, []);
 
   const matchedCategory = useMemo(() => {
     if (parentId) {
-      return categories.find((cat) => String(cat._id) === String(parentId));
+      return categories.find(
+        (category) => String(category?._id) === String(parentId),
+      );
     }
 
     const titleKey = normalizeText(title);
 
-    return categories.find((cat) => {
-      const en = normalizeText(cat?.categoryName?.en);
-      const bn = normalizeText(cat?.categoryName?.bn);
+    return categories.find((category) => {
+      const englishName = normalizeText(category?.categoryName?.en);
 
-      return en === titleKey || bn === titleKey;
+      const banglaName = normalizeText(category?.categoryName?.bn);
+
+      return englishName === titleKey || banglaName === titleKey;
     });
   }, [categories, parentId, title]);
 
-  const getTitle = () => {
+  const displayTitle = useMemo(() => {
     if (matchedCategory) {
-      return language === "bn"
-        ? matchedCategory?.categoryName?.bn || matchedCategory?.categoryName?.en
-        : matchedCategory?.categoryName?.en ||
-            matchedCategory?.categoryName?.bn;
+      if (language === "bn") {
+        return (
+          matchedCategory?.categoryName?.bn ||
+          matchedCategory?.categoryName?.en ||
+          title
+        );
+      }
+
+      return (
+        matchedCategory?.categoryName?.en ||
+        matchedCategory?.categoryName?.bn ||
+        title
+      );
     }
 
-    const map = {
+    const titleMap = {
       "HOT GAMES": translate("hotGames"),
       "HOT GAME": translate("hotGames"),
       HOME: translate("homeGames"),
@@ -142,138 +235,194 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
       "JACKPOT GAMES": translate("jackpot"),
     };
 
-    return map[normalizedTitle] || title;
-  };
+    return titleMap[normalizedTitle] || title;
+  }, [language, matchedCategory, normalizedTitle, title, translate]);
 
   const viewAllPath = useMemo(() => {
-    if (parentId) return `/category/${parentId}`;
-    if (matchedCategory?._id) return `/category/${matchedCategory._id}`;
-    if (flagKey === "isHot") return "/hot-games";
+    if (parentId) {
+      return `/category/${parentId}`;
+    }
+
+    if (matchedCategory?._id) {
+      return `/category/${matchedCategory._id}`;
+    }
+
+    if (flagKey === "isHot") {
+      return "/hot-games";
+    }
+
     return "/";
-  }, [parentId, matchedCategory, flagKey]);
-
-  const fetchGames = async () => {
-    if (!flagKey) {
-      setServerGames(games || []);
-      return;
-    }
-
-    try {
-      const params = {
-        status: "active",
-        [flagKey]: true,
-      };
-
-      if (matchedCategory?._id) {
-        params.categoryId = matchedCategory._id;
-      } else if (parentId) {
-        params.categoryId = parentId;
-      }
-
-      const { data } = await axios.get(`${API}/api/public-games`, {
-        params,
-      });
-
-      setServerGames(data?.data || []);
-    } catch {
-      setServerGames(games || []);
-    }
-  };
+  }, [parentId, matchedCategory?._id, flagKey]);
 
   useEffect(() => {
-    fetchGames();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flagKey, matchedCategory?._id, parentId, games.length]);
+    const controller = new AbortController();
 
-  const displayGames = flagKey ? serverGames : games;
+    const fetchGames = async () => {
+      if (!flagKey) {
+        setServerGames(Array.isArray(games) ? games : []);
+
+        return;
+      }
+
+      try {
+        const params = {
+          status: "active",
+          [flagKey]: true,
+          page: 1,
+          limit: GAME_LIMIT,
+        };
+
+        if (matchedCategory?._id) {
+          params.categoryId = matchedCategory._id;
+        } else if (parentId) {
+          params.categoryId = parentId;
+        }
+
+        const { data } = await axios.get(`${API}/api/public-games`, {
+          params,
+          signal: controller.signal,
+        });
+
+        const docs = extractGames(data);
+
+        if (!controller.signal.aborted) {
+          setServerGames(docs);
+        }
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+          return;
+        }
+
+        setServerGames(Array.isArray(games) ? games : []);
+      }
+    };
+
+    fetchGames();
+
+    return () => {
+      controller.abort();
+    };
+  }, [flagKey, matchedCategory?._id, parentId, games]);
+
+  const displayGames = useMemo(() => {
+    return flagKey ? serverGames : Array.isArray(games) ? games : [];
+  }, [flagKey, serverGames, games]);
+
   const hasGames = displayGames.length > 0;
+
   const hasCategoryRoute = Boolean(
     parentId || matchedCategory?._id || flagKey === "isHot",
   );
 
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 767);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+  const slidePrev = useCallback(() => {
+    swiperRef.current?.slidePrev();
   }, []);
 
-  const slidePrev = () => swiperRef.current?.slidePrev();
-  const slideNext = () => swiperRef.current?.slideNext();
+  const slideNext = useCallback(() => {
+    swiperRef.current?.slideNext();
+  }, []);
 
-  const handlePlayClick = (game) => {
-    const targetGame = game || selectedGame;
-    if (!targetGame) return;
+  const handlePlayClick = useCallback(
+    (game) => {
+      const targetGame = game || selectedGame;
 
-    if (!user) {
-      setShowRegisterModal(false);
-      setShowLoginModal(true);
-      return;
-    }
+      if (!targetGame) return;
 
-    navigate(`/liveGame/${targetGame.gameId}`);
-    setSelectedGame(null);
-  };
+      if (!user) {
+        setShowRegisterModal(false);
+        setShowLoginModal(true);
+        return;
+      }
 
-  const handleCardClick = (game) => {
-    if (isMobile) {
-      setSelectedGame(game);
-      return;
-    }
+      navigate(`/liveGame/${targetGame.gameId}`);
 
-    handlePlayClick(game);
-  };
+      setSelectedGame(null);
+    },
+    [navigate, selectedGame, user],
+  );
+
+  const handleCardClick = useCallback(
+    (game) => {
+      if (isMobile) {
+        setSelectedGame(game);
+        return;
+      }
+
+      handlePlayClick(game);
+    },
+    [handlePlayClick, isMobile],
+  );
 
   useEffect(() => {
-    if (!displayGames.length) return;
+    if (!displayGames.length || !containerRef.current) {
+      return undefined;
+    }
 
-    let animationFrameId = null;
     let timeoutId = null;
+    let animationFrameId = null;
 
     const triggerShine = () => {
-      const cards = document.querySelectorAll(".auto-shine");
+      if (!containerRef.current) return;
+
+      const cards = containerRef.current.querySelectorAll(".auto-shine");
 
       cards.forEach((card) => {
-        if (card instanceof HTMLElement) {
-          card.classList.remove("shine-animate");
-          void card.offsetWidth;
-          card.classList.add("shine-animate");
+        if (!(card instanceof HTMLElement)) {
+          return;
         }
+
+        card.classList.remove("shine-animate");
+
+        void card.offsetWidth;
+
+        card.classList.add("shine-animate");
       });
 
-      timeoutId = setTimeout(() => {
-        if (!document.hidden) {
-          animationFrameId = requestAnimationFrame(triggerShine);
-        } else {
-          timeoutId = setTimeout(triggerShine, 3000);
+      timeoutId = window.setTimeout(() => {
+        if (document.hidden) {
+          timeoutId = window.setTimeout(triggerShine, 3000);
+
+          return;
         }
+
+        animationFrameId = window.requestAnimationFrame(triggerShine);
       }, 3000);
     };
 
-    const startDelay = setTimeout(() => {
-      triggerShine();
-    }, 1000);
+    const startDelay = window.setTimeout(triggerShine, 1000);
 
     return () => {
-      clearTimeout(startDelay);
-      clearTimeout(timeoutId);
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      window.clearTimeout(startDelay);
+
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
     };
   }, [displayGames.length]);
 
   if (!hasGames) return null;
 
   return (
-    <div className="max-w-5xl mx-auto mb-8 game-card-container relative">
+    <div
+      ref={containerRef}
+      className="max-w-5xl mx-auto mb-8 game-card-container relative"
+    >
       <div className="flex justify-between items-center mb-4 lg:mb-3 mt-4">
         <h2 className="text-base sm:text-lg lg:text-xl font-bold text-[#10f3c8] uppercase">
-          {getTitle()}
+          {displayTitle}
         </h2>
 
         <div className="flex items-center gap-2">
           <Link
             to={viewAllPath}
-            onClick={(e) => {
-              if (!hasCategoryRoute) e.preventDefault();
+            onClick={(event) => {
+              if (!hasCategoryRoute) {
+                event.preventDefault();
+              }
             }}
             className={`px-3 py-1.5 text-sm font-bold rounded-lg border-2 transition-all shadow-lg ${
               hasCategoryRoute
@@ -304,9 +453,11 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
 
       <Swiper
         modules={[Navigation, Grid]}
-        onSwiper={(swiper) => (swiperRef.current = swiper)}
-        observer={true}
-        observeParents={true}
+        onSwiper={(swiper) => {
+          swiperRef.current = swiper;
+        }}
+        observer
+        observeParents
         spaceBetween={8}
         grid={{
           rows:
@@ -315,17 +466,38 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
         }}
         slidesPerView={5}
         breakpoints={{
-          0: { slidesPerView: 3, spaceBetween: 8 },
-          480: { slidesPerView: 3.5, spaceBetween: 10 },
-          768: { slidesPerView: 4.5, spaceBetween: 12 },
-          1024: { slidesPerView: 5.3, spaceBetween: 14 },
-          1440: { slidesPerView: 5.3, spaceBetween: 16 },
+          0: {
+            slidesPerView: 3,
+            spaceBetween: 8,
+          },
+
+          480: {
+            slidesPerView: 3.5,
+            spaceBetween: 10,
+          },
+
+          768: {
+            slidesPerView: 4.5,
+            spaceBetween: 12,
+          },
+
+          1024: {
+            slidesPerView: 5.3,
+            spaceBetween: 14,
+          },
+
+          1440: {
+            slidesPerView: 5.3,
+            spaceBetween: 16,
+          },
         }}
         className="swiper-container"
-        style={{ padding: "0 5px" }}
+        style={{
+          padding: "0 5px",
+        }}
       >
         {displayGames.map((game, index) => (
-          <SwiperSlide key={game._id || game.gameId || index}>
+          <SwiperSlide key={game?._id || game?.gameId || index}>
             <div
               className="relative group overflow-hidden rounded-xl shadow-2xl cursor-pointer transition-all duration-500 hover:scale-105 auto-shine"
               style={{
@@ -336,15 +508,19 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
               }}
               onClick={() => handleCardClick(game)}
             >
-              <div className="shine-layer"></div>
+              <div className="shine-layer" />
 
               <div className="w-full h-full">
                 <img
                   src={getGameImage(game)}
                   alt={getGameName(game)}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover rounded-xl border-2 border-white"
-                  onError={(e) => {
-                    e.currentTarget.src = "/placeholder-game.png";
+                  onError={(event) => {
+                    event.currentTarget.onerror = null;
+
+                    event.currentTarget.src = "/placeholder-game.png";
                   }}
                 />
               </div>
@@ -386,8 +562,12 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
                 src={getGameImage(selectedGame)}
                 className="w-24 h-24 object-cover rounded-xl shadow-lg border-2 border-[#00ffaa] -mt-12"
                 alt={getGameName(selectedGame)}
-                onError={(e) => {
-                  e.currentTarget.src = "/placeholder-game.png";
+                loading="lazy"
+                decoding="async"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+
+                  event.currentTarget.src = "/placeholder-game.png";
                 }}
               />
 
@@ -435,21 +615,30 @@ const GameCard = ({ title = "HOT GAMES", games = [], parentId = "" }) => {
           position: relative;
           overflow: hidden;
         }
+
         .shine-layer {
           position: absolute;
           inset: 0;
-          background: linear-gradient(110deg, transparent 30%, white 50%, transparent 70%);
+          background: linear-gradient(
+            110deg,
+            transparent 30%,
+            white 50%,
+            transparent 70%
+          );
           transform: translateX(-150%);
           pointer-events: none;
           border-radius: inherit;
         }
+
         .shine-animate .shine-layer {
           animation: shineSwipe 1.4s ease-out forwards;
         }
+
         @keyframes shineSwipe {
           0% {
             transform: translateX(-150%) skewX(-15deg);
           }
+
           100% {
             transform: translateX(150%) skewX(-15deg);
           }

@@ -4,7 +4,16 @@ import { Navigation, Grid } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/grid";
-import { useContext, useEffect, useRef, useState } from "react";
+
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -14,13 +23,17 @@ import RegistrationModal from "@/components/shared/login/RegistrationModal";
 import { AuthContext } from "@/Context/AuthContext";
 
 const API =
-  import.meta.env.VITE_REACT_APP_BACKEND_API2 ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:5002";
+  import.meta.env.VITE_REACT_APP_BACKEND_API2 || import.meta.env.VITE_API_URL;
+
+const HOT_GAME_LIMIT = 50;
 
 const getUploadImage = (path = "") => {
   if (!path) return "/placeholder-game.png";
-  if (/^https?:\/\//i.test(path)) return path;
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
@@ -29,7 +42,6 @@ const getGameName = (game) => {
     game?.gameName ||
     game?.oracle?.name ||
     game?.name ||
-    game?.gameName ||
     game?.title ||
     game?.gameId ||
     "Game"
@@ -40,132 +52,219 @@ const getGameImage = (game) => {
   if (game?.gameImage) return game.gameImage;
   if (game?.image) return getUploadImage(game.image);
   if (game?.oracle?.image) return game.oracle.image;
+
   return "/placeholder-game.png";
+};
+
+const extractGames = (responseData) => {
+  if (Array.isArray(responseData?.data)) {
+    return responseData.data;
+  }
+
+  if (Array.isArray(responseData?.data?.games)) {
+    return responseData.data.games;
+  }
+
+  return [];
 };
 
 const HotsGame = () => {
   const swiperRef = useRef(null);
+  const containerRef = useRef(null);
+
   const navigate = useNavigate();
+
   const { user, language } = useContext(AuthContext);
 
   const [games, setGames] = useState([]);
   const [selectedGame, setSelectedGame] = useState(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+
   const [showLoginModal, setShowLoginModal] = useState(false);
+
   const [showRegisterModal, setShowRegisterModal] = useState(false);
 
-  const t = {
-    en: {
-      title: "Hot Games",
-      viewAll: "View All",
-      playNow: "PLAY NOW",
-      playGame: "Play Game",
+  const translations = useMemo(
+    () => ({
+      en: {
+        title: "Hot Games",
+        viewAll: "View All",
+        playNow: "PLAY NOW",
+        playGame: "Play Game",
+      },
+
+      bn: {
+        title: "গরম খেলা",
+        viewAll: "সব দেখুন",
+        playNow: "এখন খেলুন",
+        playGame: "খেলুন",
+      },
+    }),
+    [],
+  );
+
+  const translate = useCallback(
+    (key) => {
+      return translations?.[language]?.[key] || translations.en[key];
     },
-    bn: {
-      title: "গরম খেলা",
-      viewAll: "সব দেখুন",
-      playNow: "এখন খেলুন",
-      playGame: "খেলুন",
-    },
-  };
-
-  const translate = (key) => t?.[language]?.[key] || t.en[key];
-
-  const fetchHotGames = async () => {
-    try {
-      const { data } = await axios.get(`${API}/api/public-games`, {
-        params: {
-          status: "active",
-          isHot: true,
-        },
-      });
-
-      const docs = Array.isArray(data?.data)
-        ? data.data
-        : data?.data?.games || [];
-
-      setGames(docs);
-    } catch {
-      setGames([]);
-    }
-  };
+    [language, translations],
+  );
 
   useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchHotGames = async () => {
+      try {
+        const { data } = await axios.get(`${API}/api/public-games`, {
+          params: {
+            status: "active",
+            isHot: true,
+            page: 1,
+            limit: HOT_GAME_LIMIT,
+          },
+
+          signal: controller.signal,
+        });
+
+        const docs = extractGames(data);
+
+        if (!controller.signal.aborted) {
+          setGames(docs);
+        }
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+          return;
+        }
+
+        setGames([]);
+      }
+    };
+
     fetchHotGames();
+
+    return () => {
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 767);
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
 
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    const handleChange = (event) => {
+      setIsMobile(event.matches);
+    };
+
+    setIsMobile(mediaQuery.matches);
+
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
   }, []);
 
-  const slidePrev = () => swiperRef.current?.slidePrev();
-  const slideNext = () => swiperRef.current?.slideNext();
+  const slidePrev = useCallback(() => {
+    swiperRef.current?.slidePrev();
+  }, []);
 
-  const handlePlayClick = (game) => {
-    const targetGame = game || selectedGame;
-    if (!targetGame) return;
+  const slideNext = useCallback(() => {
+    swiperRef.current?.slideNext();
+  }, []);
 
-    if (!user) {
-      setShowRegisterModal(false);
-      setShowLoginModal(true);
-      return;
-    }
+  const handlePlayClick = useCallback(
+    (game) => {
+      const targetGame = game || selectedGame;
 
-    navigate(`/liveGame/${targetGame.gameId}`);
-    setSelectedGame(null);
-  };
+      if (!targetGame) return;
 
-  const handleCardClick = (game) => {
-    if (isMobile) {
-      setSelectedGame(game);
-      return;
-    }
+      if (!user) {
+        setShowRegisterModal(false);
+        setShowLoginModal(true);
+        return;
+      }
 
-    handlePlayClick(game);
-  };
+      navigate(`/liveGame/${targetGame.gameId}`);
+
+      setSelectedGame(null);
+    },
+    [navigate, selectedGame, user],
+  );
+
+  const handleCardClick = useCallback(
+    (game) => {
+      if (isMobile) {
+        setSelectedGame(game);
+        return;
+      }
+
+      handlePlayClick(game);
+    },
+    [handlePlayClick, isMobile],
+  );
 
   useEffect(() => {
-    if (!games.length) return;
+    if (!games.length || !containerRef.current) {
+      return undefined;
+    }
 
-    let animationFrameId = null;
     let timeoutId = null;
+    let animationFrameId = null;
 
     const triggerShine = () => {
-      const cards = document.querySelectorAll(".hot-auto-shine");
+      if (!containerRef.current) return;
+
+      const cards = containerRef.current.querySelectorAll(".hot-auto-shine");
 
       cards.forEach((card) => {
-        if (card instanceof HTMLElement) {
-          card.classList.remove("hot-shine-animate");
-          void card.offsetWidth;
-          card.classList.add("hot-shine-animate");
+        if (!(card instanceof HTMLElement)) {
+          return;
         }
+
+        card.classList.remove("hot-shine-animate");
+
+        void card.offsetWidth;
+
+        card.classList.add("hot-shine-animate");
       });
 
-      timeoutId = setTimeout(() => {
-        if (!document.hidden) {
-          animationFrameId = requestAnimationFrame(triggerShine);
-        } else {
-          timeoutId = setTimeout(triggerShine, 3000);
+      timeoutId = window.setTimeout(() => {
+        if (document.hidden) {
+          timeoutId = window.setTimeout(triggerShine, 3000);
+
+          return;
         }
+
+        animationFrameId = window.requestAnimationFrame(triggerShine);
       }, 3000);
     };
 
-    const startDelay = setTimeout(triggerShine, 1000);
+    const startDelay = window.setTimeout(triggerShine, 1000);
 
     return () => {
-      clearTimeout(startDelay);
-      clearTimeout(timeoutId);
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      window.clearTimeout(startDelay);
+
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
     };
   }, [games.length]);
 
   if (!games.length) return null;
 
   return (
-    <div className="max-w-5xl mx-auto mb-8 game-card-container relative">
+    <div
+      ref={containerRef}
+      className="max-w-5xl mx-auto mb-8 game-card-container relative"
+    >
       <div className="flex justify-between items-center mb-4 lg:mb-3 mt-4">
         <h2 className="text-base sm:text-lg lg:text-xl font-bold text-[#10f3c8] uppercase">
           {translate("title")}
@@ -199,9 +298,11 @@ const HotsGame = () => {
 
       <Swiper
         modules={[Navigation, Grid]}
-        onSwiper={(swiper) => (swiperRef.current = swiper)}
-        observer={true}
-        observeParents={true}
+        onSwiper={(swiper) => {
+          swiperRef.current = swiper;
+        }}
+        observer
+        observeParents
         spaceBetween={8}
         grid={{
           rows: 2,
@@ -209,17 +310,38 @@ const HotsGame = () => {
         }}
         slidesPerView={5}
         breakpoints={{
-          0: { slidesPerView: 3, spaceBetween: 8 },
-          480: { slidesPerView: 3.5, spaceBetween: 10 },
-          768: { slidesPerView: 4.5, spaceBetween: 12 },
-          1024: { slidesPerView: 5.3, spaceBetween: 14 },
-          1440: { slidesPerView: 5.3, spaceBetween: 16 },
+          0: {
+            slidesPerView: 3,
+            spaceBetween: 8,
+          },
+
+          480: {
+            slidesPerView: 3.5,
+            spaceBetween: 10,
+          },
+
+          768: {
+            slidesPerView: 4.5,
+            spaceBetween: 12,
+          },
+
+          1024: {
+            slidesPerView: 5.3,
+            spaceBetween: 14,
+          },
+
+          1440: {
+            slidesPerView: 5.3,
+            spaceBetween: 16,
+          },
         }}
         className="swiper-container"
-        style={{ padding: "0 5px" }}
+        style={{
+          padding: "0 5px",
+        }}
       >
         {games.map((game, index) => (
-          <SwiperSlide key={game._id || game.gameId || index}>
+          <SwiperSlide key={game?._id || game?.gameId || index}>
             <div
               className="relative group overflow-hidden rounded-xl shadow-2xl cursor-pointer transition-all duration-500 hover:scale-105 hot-auto-shine"
               style={{
@@ -230,16 +352,20 @@ const HotsGame = () => {
               }}
               onClick={() => handleCardClick(game)}
             >
-              <div className="hot-shine-layer"></div>
+              <div className="hot-shine-layer" />
 
               <div className="w-full h-full">
                 <img
                   src={getGameImage(game)}
                   alt={getGameName(game)}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover rounded-xl border-2 border-white"
-                  // onError={(e) => {
-                  //   e.currentTarget.src = "/placeholder-game.png";
-                  // }}
+                  onError={(event) => {
+                    event.currentTarget.onerror = null;
+
+                    event.currentTarget.src = "/placeholder-game.png";
+                  }}
                 />
               </div>
 
@@ -280,9 +406,13 @@ const HotsGame = () => {
                 src={getGameImage(selectedGame)}
                 className="w-24 h-24 object-cover rounded-xl shadow-lg border-2 border-[#00ffaa] -mt-12"
                 alt={getGameName(selectedGame)}
-                // onError={(e) => {
-                //   e.currentTarget.src = "/placeholder-game.png";
-                // }}
+                loading="lazy"
+                decoding="async"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+
+                  event.currentTarget.src = "/placeholder-game.png";
+                }}
               />
 
               <h3 className="text-lg font-bold text-gray-800 truncate">
@@ -333,7 +463,12 @@ const HotsGame = () => {
         .hot-shine-layer {
           position: absolute;
           inset: 0;
-          background: linear-gradient(110deg, transparent 30%, white 50%, transparent 70%);
+          background: linear-gradient(
+            110deg,
+            transparent 30%,
+            white 50%,
+            transparent 70%
+          );
           transform: translateX(-150%);
           pointer-events: none;
           border-radius: inherit;
@@ -347,6 +482,7 @@ const HotsGame = () => {
           0% {
             transform: translateX(-150%) skewX(-15deg);
           }
+
           100% {
             transform: translateX(150%) skewX(-15deg);
           }

@@ -1,11 +1,19 @@
 import MarqueeSlider from "@/components/home/Marque/MarqueeSlider";
-import { useEffect, useRef, useState, useContext, useMemo } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useContext,
+  useMemo,
+  useCallback,
+} from "react";
 import { BsFire } from "react-icons/bs";
 import { useParams, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay } from "swiper/modules";
 import "swiper/css";
+
 import Modal from "@/components/home/modal/Modal";
 import Login from "@/components/shared/login/Login";
 import RegistrationModal from "@/components/shared/login/RegistrationModal";
@@ -17,11 +25,15 @@ const API =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5002";
 
-const GAMES_PER_PAGE = 30;
+const GAMES_PER_PAGE = 50;
 
 const getUploadImage = (path = "") => {
   if (!path) return "";
-  if (/^https?:\/\//i.test(path)) return path;
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   return `${API}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
@@ -32,7 +44,44 @@ const getGameImage = (game) => {
   if (game?.gameImage) return game.gameImage;
   if (game?.image) return getUploadImage(game.image);
   if (game?.oracle?.image) return game.oracle.image;
+
   return "/placeholder-game.png";
+};
+
+const extractGames = (responseData) => {
+  if (Array.isArray(responseData?.data)) {
+    return responseData.data;
+  }
+
+  if (Array.isArray(responseData?.data?.games)) {
+    return responseData.data.games;
+  }
+
+  return [];
+};
+
+const extractMeta = (responseData) => {
+  const meta = responseData?.data?.meta;
+
+  if (!meta || typeof meta !== "object") {
+    return {
+      page: 1,
+      limit: GAMES_PER_PAGE,
+      total: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    };
+  }
+
+  return {
+    page: Number(meta.page) || 1,
+    limit: Number(meta.limit) || GAMES_PER_PAGE,
+    total: Number(meta.total) || 0,
+    totalPages: Math.max(Number(meta.totalPages) || 1, 1),
+    hasNextPage: Boolean(meta.hasNextPage),
+    hasPreviousPage: Boolean(meta.hasPreviousPage),
+  };
 };
 
 const IconContainer = styled.div`
@@ -137,115 +186,205 @@ const PaginationButton = ({ disabled, onClick, children, active }) => (
 const SubmenuPage = () => {
   const navigate = useNavigate();
   const swiperRef = useRef(null);
+
   const { submenu, categoryId } = useParams();
   const routeCategoryId = categoryId || submenu;
 
   const { language, user } = useContext(AuthContext);
 
   const [selectedProviderId, setSelectedProviderId] = useState("all");
+
   const [category, setCategory] = useState(null);
   const [providers, setProviders] = useState([]);
   const [gamesWithOracle, setGamesWithOracle] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [loadingGames, setLoadingGames] = useState(false);
+
   const [currentPage, setCurrentPage] = useState(1);
 
+  const [paginationMeta, setPaginationMeta] = useState({
+    page: 1,
+    limit: GAMES_PER_PAGE,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
+
   const [showLoginModal, setShowLoginModal] = useState(false);
+
   const [showRegisterModal, setShowRegisterModal] = useState(false);
 
   const allButtonLabel = language === "bn" ? "সব" : "All";
 
-  const loadCategoryAndProviders = async () => {
-    if (!routeCategoryId) return;
-
-    try {
-      setLoading(true);
-
-      const [providerRes, categoryRes] = await Promise.all([
-        axios.get(`${API}/api/public-games/providers/active`, {
-          params: { categoryId: routeCategoryId },
-        }),
-        axios
-          .get(`${API}/api/public-games/categories/active`)
-          .catch(() => null),
-      ]);
-
-      const providerData = providerRes?.data?.data || [];
-      setProviders(providerData);
-
-      const categoryList = categoryRes?.data?.data || [];
-      const foundCategory = categoryList.find(
-        (item) => String(item._id) === String(routeCategoryId),
-      );
-
-      if (foundCategory) {
-        setCategory(foundCategory);
-      } else if (providerData?.[0]?.categoryId) {
-        setCategory(providerData[0].categoryId);
-      } else {
-        setCategory(null);
-      }
-    } catch {
+  useEffect(() => {
+    if (!routeCategoryId) {
       setCategory(null);
       setProviders([]);
-    } finally {
-      setLoading(false);
+      return undefined;
     }
-  };
 
-  const loadGames = async () => {
-    if (!routeCategoryId) return;
+    const controller = new AbortController();
 
-    try {
-      setLoadingGames(true);
+    const loadCategoryAndProviders = async () => {
+      try {
+        setLoading(true);
 
-      const params =
-        selectedProviderId === "all"
-          ? {
-              status: "active",
+        const [providerRes, categoryRes] = await Promise.all([
+          axios.get(`${API}/api/public-games/providers/active`, {
+            params: {
               categoryId: routeCategoryId,
-            }
-          : {
-              status: "active",
-              providerDbId: selectedProviderId,
-            };
+            },
+            signal: controller.signal,
+          }),
 
-      const { data } = await axios.get(`${API}/api/public-games`, {
-        params,
-      });
+          axios
+            .get(`${API}/api/public-games/categories/active`, {
+              signal: controller.signal,
+            })
+            .catch((error) => {
+              if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+                throw error;
+              }
 
-      const docs = Array.isArray(data?.data)
-        ? data.data
-        : data?.data?.games || [];
+              return null;
+            }),
+        ]);
 
-      setGamesWithOracle(docs);
-    } catch {
-      setGamesWithOracle([]);
-    } finally {
-      setLoadingGames(false);
-    }
-  };
+        const providerData = Array.isArray(providerRes?.data?.data)
+          ? providerRes.data.data
+          : [];
 
-  useEffect(() => {
+        setProviders(providerData);
+
+        const categoryList = Array.isArray(categoryRes?.data?.data)
+          ? categoryRes.data.data
+          : [];
+
+        const foundCategory = categoryList.find(
+          (item) => String(item?._id) === String(routeCategoryId),
+        );
+
+        if (foundCategory) {
+          setCategory(foundCategory);
+        } else if (providerData?.[0]?.categoryId) {
+          setCategory(providerData[0].categoryId);
+        } else {
+          setCategory(null);
+        }
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+          return;
+        }
+
+        setCategory(null);
+        setProviders([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
     setSelectedProviderId("all");
     setCurrentPage(1);
+    setGamesWithOracle([]);
+
+    setPaginationMeta({
+      page: 1,
+      limit: GAMES_PER_PAGE,
+      total: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
+
     loadCategoryAndProviders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => {
+      controller.abort();
+    };
   }, [routeCategoryId]);
 
   useEffect(() => {
-    setCurrentPage(1);
+    if (!routeCategoryId) {
+      setGamesWithOracle([]);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    const loadGames = async () => {
+      try {
+        setLoadingGames(true);
+
+        const params =
+          selectedProviderId === "all"
+            ? {
+                status: "active",
+                categoryId: routeCategoryId,
+                page: currentPage,
+                limit: GAMES_PER_PAGE,
+              }
+            : {
+                status: "active",
+                providerDbId: selectedProviderId,
+                page: currentPage,
+                limit: GAMES_PER_PAGE,
+              };
+
+        const { data } = await axios.get(`${API}/api/public-games`, {
+          params,
+          signal: controller.signal,
+        });
+
+        const docs = extractGames(data);
+        const meta = extractMeta(data);
+
+        setGamesWithOracle(docs);
+        setPaginationMeta(meta);
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || axios.isCancel(error)) {
+          return;
+        }
+
+        setGamesWithOracle([]);
+
+        setPaginationMeta({
+          page: currentPage,
+          limit: GAMES_PER_PAGE,
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: currentPage > 1,
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingGames(false);
+        }
+      }
+    };
+
     loadGames();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeCategoryId, selectedProviderId]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [routeCategoryId, selectedProviderId, currentPage]);
 
   const subOption = useMemo(() => {
     const allItem = {
       id: "all",
       label: allButtonLabel,
       icon: (
-        <span className="text-black" style={{ fontSize: "16px", fontWeight: "bold" }}>
+        <span
+          className="text-black"
+          style={{
+            fontSize: "16px",
+            fontWeight: "bold",
+          }}
+        >
           {allButtonLabel}
         </span>
       ),
@@ -264,51 +403,89 @@ const SubmenuPage = () => {
     return [allItem, ...providerItems];
   }, [providers, allButtonLabel]);
 
-  const categoryTitle =
-    language === "bn"
-      ? category?.categoryName?.bn || category?.categoryName?.en || "Games"
-      : category?.categoryName?.en || category?.categoryName?.bn || "Games";
-
-  const totalPages = Math.ceil(gamesWithOracle.length / GAMES_PER_PAGE) || 1;
-  const startIndex = (currentPage - 1) * GAMES_PER_PAGE;
-
-  const paginatedGames = gamesWithOracle.slice(
-    startIndex,
-    startIndex + GAMES_PER_PAGE,
-  );
-
-  const goToPage = (page) => {
-    if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleProviderClick = (providerId) => {
-    setSelectedProviderId(providerId);
-    setCurrentPage(1);
-  };
-
-  const handlePlayClick = (game) => {
-    if (!game) return;
-
-    if (!user) {
-      setShowRegisterModal(false);
-      setShowLoginModal(true);
-      return;
+  const categoryTitle = useMemo(() => {
+    if (language === "bn") {
+      return (
+        category?.categoryName?.bn || category?.categoryName?.en || "Games"
+      );
     }
 
-    navigate(`/liveGame/${game.gameId}`);
-  };
+    return category?.categoryName?.en || category?.categoryName?.bn || "Games";
+  }, [category, language]);
+
+  const totalPages = paginationMeta.totalPages || 1;
+
+  const totalGames = paginationMeta.total || 0;
+
+  const goToPage = useCallback(
+    (page) => {
+      if (
+        page < 1 ||
+        page > totalPages ||
+        page === currentPage ||
+        loadingGames
+      ) {
+        return;
+      }
+
+      setCurrentPage(page);
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    },
+    [totalPages, currentPage, loadingGames],
+  );
+
+  const handleProviderClick = useCallback(
+    (providerId) => {
+      if (String(selectedProviderId) === String(providerId)) {
+        return;
+      }
+
+      setSelectedProviderId(providerId);
+      setCurrentPage(1);
+      setGamesWithOracle([]);
+
+      setPaginationMeta({
+        page: 1,
+        limit: GAMES_PER_PAGE,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      });
+    },
+    [selectedProviderId],
+  );
+
+  const handlePlayClick = useCallback(
+    (game) => {
+      if (!game) return;
+
+      if (!user) {
+        setShowRegisterModal(false);
+        setShowLoginModal(true);
+        return;
+      }
+
+      navigate(`/liveGame/${game.gameId}`);
+    },
+    [navigate, user],
+  );
 
   return (
-    <div className="min-h-screen  pb-20">
+    <div className="min-h-screen pb-20">
       <MarqueeSlider />
 
       <div className="mx-auto max-w-5xl px-2 pt-3">
         <SwiperContainer>
           <Swiper
             modules={[Autoplay]}
-            onSwiper={(swiper) => (swiperRef.current = swiper)}
+            onSwiper={(swiper) => {
+              swiperRef.current = swiper;
+            }}
             slidesPerView="auto"
             spaceBetween={8}
             autoplay={{
@@ -324,7 +501,17 @@ const SubmenuPage = () => {
                 >
                   <IconContainer>
                     {typeof item.icon === "string" ? (
-                      <img src={item.icon} alt={item.label} />
+                      <img
+                        src={item.icon}
+                        alt={item.label}
+                        loading="lazy"
+                        decoding="async"
+                        // onError={(event) => {
+                        //   event.currentTarget.onerror = null;
+
+                        //   event.currentTarget.src = "/placeholder-game.png";
+                        // }}
+                      />
                     ) : (
                       item.icon
                     )}
@@ -345,20 +532,22 @@ const SubmenuPage = () => {
           </h1>
 
           <div className="text-xs font-bold text-[#e0fff7]/80">
-            {gamesWithOracle.length} {language === "bn" ? "গেম" : "Games"}
+            {totalGames} {language === "bn" ? "গেম" : "Games"}
           </div>
         </div>
 
         {loadingGames ? (
           <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
-            {Array.from({ length: 15 }).map((_, idx) => (
+            {Array.from({
+              length: 15,
+            }).map((_, idx) => (
               <div
                 key={idx}
                 className="h-36 sm:h-44 rounded-xl bg-[#003840] animate-pulse border border-[#006165]"
               />
             ))}
           </div>
-        ) : paginatedGames.length === 0 ? (
+        ) : gamesWithOracle.length === 0 ? (
           <div className="rounded-xl border border-[#006165] bg-[#003840] py-10 text-center text-[#e0fff7]">
             {language === "bn"
               ? "এই ক্যাটাগরিতে কোনো গেম পাওয়া যায়নি"
@@ -367,7 +556,7 @@ const SubmenuPage = () => {
         ) : (
           <>
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
-              {paginatedGames.map((game, index) => (
+              {gamesWithOracle.map((game, index) => (
                 <div
                   key={game._id || game.gameId || index}
                   onClick={() => handlePlayClick(game)}
@@ -382,10 +571,14 @@ const SubmenuPage = () => {
                   <img
                     src={getGameImage(game)}
                     alt={getGameName(game)}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover rounded-xl border-2 border-white"
-                    onError={(e) => {
-                      e.currentTarget.src = "/placeholder-game.png";
-                    }}
+                    // onError={(event) => {
+                    //   event.currentTarget.onerror = null;
+
+                    //   event.currentTarget.src = "/placeholder-game.png";
+                    // }}
                   />
 
                   <div className="absolute inset-0 hidden md:flex flex-col items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700 px-1 uppercase">
@@ -411,14 +604,17 @@ const SubmenuPage = () => {
             {totalPages > 1 && (
               <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                 <PaginationButton
-                  disabled={currentPage === 1}
+                  disabled={currentPage === 1 || loadingGames}
                   onClick={() => goToPage(currentPage - 1)}
                 >
                   {language === "bn" ? "আগে" : "Prev"}
                 </PaginationButton>
 
-                {Array.from({ length: totalPages }).map((_, idx) => {
+                {Array.from({
+                  length: totalPages,
+                }).map((_, idx) => {
                   const page = idx + 1;
+
                   if (
                     page !== 1 &&
                     page !== totalPages &&
@@ -427,7 +623,7 @@ const SubmenuPage = () => {
                     if (page === currentPage - 2 || page === currentPage + 2) {
                       return (
                         <span
-                          key={page}
+                          key={`ellipsis-${page}`}
                           className="px-2 text-[#e0fff7]/70 font-bold"
                         >
                           ...
@@ -442,6 +638,7 @@ const SubmenuPage = () => {
                     <PaginationButton
                       key={page}
                       active={page === currentPage}
+                      disabled={loadingGames}
                       onClick={() => goToPage(page)}
                     >
                       {page}
@@ -450,7 +647,7 @@ const SubmenuPage = () => {
                 })}
 
                 <PaginationButton
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === totalPages || loadingGames}
                   onClick={() => goToPage(currentPage + 1)}
                 >
                   {language === "bn" ? "পরে" : "Next"}
