@@ -3,6 +3,8 @@ import Admin from "../models/Admin.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
+import axios from "axios";
+import NineWicketWallet from "../models/NineWicketWallet.js";
 
 const router = express.Router();
 
@@ -84,6 +86,408 @@ const generateToken = (user) => {
       expiresIn: process.env.JWT_EXPIRE || "7d",
     }
   );
+};
+
+
+/* =========================================================
+   NINE WICKET CONFIGURATION
+========================================================= */
+
+const ORACLE_LAUNCH_KEY =
+  process.env.ORACLE_LAUNCH_KEY ||
+  "2ab23a348e3bfe2068fc9a9150a874fb";
+
+const NINE_WICKET_GET_BALANCE_URL =
+  process.env.NINE_WICKET_GET_BALANCE_URL ||
+  "https://oraclegames.net/api/ninewicket/getbalance";
+
+/**
+ * একই user-এর জন্য একই সময়ে multiple balance sync আটকাবে।
+ */
+const nineWicketBalanceSyncLocks = new Map();
+
+/* =========================================================
+   NINE WICKET HELPERS
+========================================================= */
+
+const toMoney = (value = 0) => {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    return 0;
+  }
+
+  return Math.trunc(amount * 100) / 100;
+};
+
+const isValidNineWicketUsername = (value = "") => {
+  return /^[a-z]{6}$/.test(
+    String(value || "")
+      .trim()
+      .toLowerCase(),
+  );
+};
+
+const getDefaultNineWicketData = (user) => {
+  return {
+    username: user?.nineWicketUsername || null,
+
+    usernameValid: isValidNineWicketUsername(
+      user?.nineWicketUsername,
+    ),
+
+    synced: false,
+
+    addedAmount: 0,
+
+    totalTransferred: 0,
+
+    totalReturned: 0,
+
+    exposureBalance: 0,
+
+    status: "idle",
+  };
+};
+
+/* =========================================================
+   NINE WICKET BALANCE SYNC
+========================================================= */
+
+/**
+ * Nine Wicket provider থেকে available balance এনে:
+ *
+ * 1. Admin.balance-এ যোগ করবে।
+ * 2. NineWicketWallet.totalReturned update করবে।
+ * 3. Existing exposure অপরিবর্তিত রাখবে।
+ * 4. Provider API fail করলেও existing local balance return করবে।
+ */
+const performNineWicketBalanceSync = async (user) => {
+  let currentBalance = toMoney(user.balance);
+
+  const nineWicketUsername = String(
+    user.nineWicketUsername || "",
+  )
+    .trim()
+    .toLowerCase();
+
+  const usernameValid = isValidNineWicketUsername(
+    nineWicketUsername,
+  );
+
+  let wallet = await NineWicketWallet.findOne({
+    user: user._id,
+  });
+
+  let synced = false;
+
+  let addedAmount = 0;
+
+  let totalTransferred = toMoney(
+    wallet?.totalTransferred,
+  );
+
+  let totalReturned = toMoney(
+    wallet?.totalReturned,
+  );
+
+  /**
+   * Exposure শুধু callback route থেকে update হবে।
+   */
+  let exposureBalance = Math.max(
+    0,
+    toMoney(wallet?.exposureBalance),
+  );
+
+  let status = wallet?.status || "idle";
+
+  /**
+   * শুধু normal user-এর Nine Wicket balance sync হবে।
+   * Affiliate account-এর জন্য provider call করা হবে না।
+   */
+  if (
+    user.role === "user" &&
+    usernameValid
+  ) {
+    try {
+      const response = await axios.post(
+        NINE_WICKET_GET_BALANCE_URL,
+
+        {
+          username: nineWicketUsername,
+        },
+
+        {
+          headers: {
+            "Content-Type": "application/json",
+
+            "x-oracle-key": ORACLE_LAUNCH_KEY,
+          },
+
+          timeout: 30000,
+        },
+      );
+
+      const transferStatus = Number(
+        response.data?.transfer_status,
+      );
+
+      const providerAmount = toMoney(
+        response.data?.get_amount,
+      );
+
+      if (transferStatus === 1) {
+        synced = true;
+
+        /**
+         * Provider balance ফেরত দিলে main balance-এ যোগ হবে।
+         */
+        if (providerAmount > 0) {
+          addedAmount = providerAmount;
+
+          const updatedUser =
+            await Admin.findOneAndUpdate(
+              {
+                _id: user._id,
+
+                role: "user",
+
+                isActive: true,
+              },
+
+              {
+                $inc: {
+                  balance: addedAmount,
+                },
+              },
+
+              {
+                returnDocument: "after",
+              },
+            ).select("balance");
+
+          if (!updatedUser) {
+            throw new Error(
+              "Failed to add Nine Wicket balance to user",
+            );
+          }
+
+          currentBalance = toMoney(
+            updatedUser.balance,
+          );
+        }
+
+        const now = new Date();
+
+        if (wallet) {
+          totalTransferred = toMoney(
+            wallet.totalTransferred,
+          );
+
+          totalReturned = toMoney(
+            toMoney(wallet.totalReturned) +
+              addedAmount,
+          );
+
+          /**
+           * Callback route থেকে পাওয়া exposure
+           * পরিবর্তন করা হবে না।
+           */
+          exposureBalance = Math.max(
+            0,
+            toMoney(wallet.exposureBalance),
+          );
+
+          if (exposureBalance > 0) {
+            status = "exposure";
+          } else if (addedAmount > 0) {
+            status = "settled";
+          } else if (
+            wallet.status === "playing"
+          ) {
+            status = "playing";
+          } else {
+            status =
+              wallet.status || "settled";
+          }
+
+          wallet.username =
+            nineWicketUsername;
+
+          wallet.totalReturned =
+            totalReturned;
+
+          wallet.lastReturnedAmount =
+            addedAmount;
+
+          if (addedAmount > 0) {
+            wallet.lastReturnedAt = now;
+          }
+
+          wallet.lastSyncAt = now;
+
+          wallet.exposureBalance =
+            exposureBalance;
+
+          wallet.status = status;
+
+          await wallet.save();
+        } else {
+          wallet =
+            await NineWicketWallet.create({
+              user: user._id,
+
+              username:
+                nineWicketUsername,
+
+              totalTransferred: 0,
+
+              totalReturned: addedAmount,
+
+              exposureBalance: 0,
+
+              lastTransferAmount: 0,
+
+              lastReturnedAmount:
+                addedAmount,
+
+              lastTransferAt: null,
+
+              lastReturnedAt:
+                addedAmount > 0
+                  ? now
+                  : null,
+
+              lastSyncAt: now,
+
+              status:
+                addedAmount > 0
+                  ? "settled"
+                  : "idle",
+            });
+
+          totalTransferred = 0;
+
+          totalReturned = addedAmount;
+
+          exposureBalance = 0;
+
+          status =
+            addedAmount > 0
+              ? "settled"
+              : "idle";
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Nine Wicket balance sync error:",
+        error.response?.data ||
+          error.message,
+      );
+
+      /**
+       * Provider API fail করলে endpoint fail হবে না।
+       * Existing local balance এবং exposure return করবে।
+       */
+    }
+  }
+
+  /**
+   * Callback একই সময়ে exposure update করতে পারে।
+   * তাই response দেওয়ার আগে latest wallet read করা হচ্ছে।
+   */
+  const latestWallet =
+    await NineWicketWallet.findOne({
+      user: user._id,
+    }).lean();
+
+  if (latestWallet) {
+    totalTransferred = toMoney(
+      latestWallet.totalTransferred,
+    );
+
+    totalReturned = toMoney(
+      latestWallet.totalReturned,
+    );
+
+    exposureBalance = Math.max(
+      0,
+      toMoney(latestWallet.exposureBalance),
+    );
+
+    status =
+      latestWallet.status ||
+      (exposureBalance > 0
+        ? "exposure"
+        : "settled");
+  }
+
+  const totalBalance = toMoney(
+    currentBalance + exposureBalance,
+  );
+
+  return {
+    balance: currentBalance,
+
+    exposureBalance,
+
+    totalBalance,
+
+    nineWicket: {
+      username:
+        nineWicketUsername || null,
+
+      usernameValid,
+
+      synced,
+
+      addedAmount,
+
+      totalTransferred,
+
+      totalReturned,
+
+      exposureBalance,
+
+      status,
+    },
+  };
+};
+
+/* =========================================================
+   SYNCHRONIZATION LOCK
+========================================================= */
+
+const syncNineWicketBalance = async (user) => {
+  const lockKey = String(user._id);
+
+  /**
+   * এই user-এর sync আগে থেকেই চললে একই result-এর
+   * জন্য অপেক্ষা করবে, দ্বিতীয় provider request করবে না।
+   */
+  if (
+    nineWicketBalanceSyncLocks.has(lockKey)
+  ) {
+    return nineWicketBalanceSyncLocks.get(
+      lockKey,
+    );
+  }
+
+  const syncPromise =
+    performNineWicketBalanceSync(user);
+
+  nineWicketBalanceSyncLocks.set(
+    lockKey,
+    syncPromise,
+  );
+
+  try {
+    return await syncPromise;
+  } finally {
+    nineWicketBalanceSyncLocks.delete(
+      lockKey,
+    );
+  }
 };
 
 // API: /api/affiliate/stats/BAEAFD  (যেখানে BAEAFD হলো referralCode)
@@ -571,28 +975,132 @@ router.post("/aff-login", async (req, res) => {
 // routes/admin.js
 router.get("/admin", async (req, res) => {
   try {
-    const id = req.query.id;
-    if (!id) return res.status(401).json({ message: "No user ID" });
+    const id = String(
+      req.query.id || "",
+    ).trim();
+
+    if (!id) {
+      return res.status(401).json({
+        success: false,
+        message: "No user ID",
+      });
+    }
 
     const user = await Admin.findById(id)
       .select("-password")
       .populate({
         path: "pendingRequests",
+
+        /**
+         * Password কখনো response-এ পাঠানো হবে না।
+         */
         select:
-          "username email whatsapp balance password isActive gameWinCommission gameLossCommission depositCommission referCommission commissionBalance",
+          "username email whatsapp balance isActive gameWinCommission gameLossCommission depositCommission referCommission commissionBalance",
       })
       .populate({
         path: "createdUsers",
+
         select:
-          "username email whatsapp balance password isActive gameWinCommission gameLossCommission depositCommission referCommission commissionBalance",
+          "username email whatsapp balance isActive gameWinCommission gameLossCommission depositCommission referCommission commissionBalance",
       });
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
-    res.json({ user });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    /**
+     * Main balance-এর সঙ্গে Nine Wicket returned balance
+     * sync এবং exposure read করা হবে।
+     */
+    let balanceData = {
+      balance: toMoney(user.balance),
+
+      exposureBalance: 0,
+
+      totalBalance: toMoney(user.balance),
+
+      nineWicket:
+        getDefaultNineWicketData(user),
+    };
+
+    try {
+      balanceData =
+        await syncNineWicketBalance(user);
+    } catch (syncError) {
+      console.error(
+        "Admin Nine Wicket balance sync error:",
+        syncError.message,
+      );
+    }
+
+    const userData = user.toObject();
+
+    /**
+     * Existing client compatibility:
+     * user.balance একই জায়গাতেই থাকবে।
+     */
+    userData.balance =
+      balanceData.balance;
+
+    /**
+     * Nine Wicket exposure।
+     */
+    userData.exposureBalance =
+      balanceData.exposureBalance;
+
+    /**
+     * Main balance + active exposure।
+     */
+    userData.totalBalance =
+      balanceData.totalBalance;
+
+    userData.nineWicket =
+      balanceData.nineWicket;
+
+    userData.nineWicketUsername =
+      user.nineWicketUsername || null;
+
+    userData.userGamePlayName =
+      user.userGamePlayName || null;
+
+    return res.status(200).json({
+      success: true,
+
+      user: userData,
+
+      /**
+       * Top-level field-ও রাখা হয়েছে।
+       */
+      balance: balanceData.balance,
+
+      exposureBalance:
+        balanceData.exposureBalance,
+
+      totalBalance:
+        balanceData.totalBalance,
+
+      currency:
+        user.currency || "BDT",
+
+      nineWicket:
+        balanceData.nineWicket,
+    });
+  } catch (error) {
+    console.error(
+      "GET ADMIN/USER BALANCE ERROR:",
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        error.message ||
+        "Failed to load user balance",
+    });
   }
 });
 

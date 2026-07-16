@@ -41,7 +41,7 @@ import publicGameRoutes from "./routes/publicGameRoutes.js";
 import dailyBonusSettingRoutes from "./routes/dailyBonusSettingRoutes.js";
 import dailyBonusUserRoutes from "./routes/dailyBonusUserRoutes.js";
 import dailyBonusAdminRoutes from "./routes/dailyBonusAdminRoutes.js";
-
+import nineWicketWalletRoutes from "./routes/nineWicketWalletRoutes.js";
 
 dotenv.config();
 const app = express();
@@ -96,13 +96,12 @@ app.use("/api/public-games", publicGameRoutes);
 app.use("/api/daily-bonus-settings", dailyBonusSettingRoutes);
 app.use("/api/daily-bonus/user", dailyBonusUserRoutes);
 app.use("/api/daily-bonus/admin", dailyBonusAdminRoutes);
-
+app.use("/api/nine-wicket-wallet", nineWicketWalletRoutes);
 
 // Test route
 app.get("/", (req, res) => {
   res.send("Server is running 🚀");
 });
-
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
